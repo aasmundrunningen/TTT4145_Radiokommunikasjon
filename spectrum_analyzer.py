@@ -94,7 +94,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("The PySDR Spectrum Analyzer")
-        self.setFixedSize(QSize(1500, 1000)) # window size, starting size should fit on 1920 x 1080
+        self.setFixedSize(QSize(1000, 700)) # window size, starting size should fit on 1920 x 1080
 
         self.spectrogram_min = 0
         self.spectrogram_max = 0

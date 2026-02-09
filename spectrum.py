@@ -18,10 +18,10 @@ sdr.rx_enabled_channels = [0]
 
 
 
+
 #Motta samples
 fs = int(sdr.sample_rate)
 data = sdr.rx() 
-
 
 
 #FFT
