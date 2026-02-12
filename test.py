@@ -1,47 +1,152 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
-def rrc_filter(beta, span, sps):
-    """
-    beta: roll-off factor
-    span: filter length in symbols
-    sps: samples per symbol
-    """
-    T = 1
-    N = span * sps
-    t = np.arange(-N/2, N/2 + 1) / sps
+data = """-5,-9
+0,-23
+4,-20
+23,-22
+36,12
+39,20
+18,29
+-13,-5
+-36,-30
+-26,-43
+11,-6
+48,40
+46,64
+-2,24
+-60,-47
+-72,-90
+-16,-49
+69,49
+104,122
+43,85
+-74,-44
+-142,-158
+-82,-134
+71,29
+184,196
+136,196
+-57,-1
+-228,-234
+-205,-274
+26,-46
+272,270
+291,368
+25,114
+-311,-298
+-395,-481
+-101,-212
+342,315
+519,612
+210,344
+-357,-312
+-663,-762
+-361,-522
+349,282
+829,935
+564,757
+-307,-212
+-1022,-1133
+-841,-1074
+216,80
+1251,1365
+1225,1510
+-44,149
+-1536,-1646
+-1793,-2146
+-268,-551
+1930,2016
+2728,3173
+873,1310
+-2622,-2634
+-4718,-5298
+-2416,-3194
+4788,4431
+13982,14435
+20380,21470
+20380,21470
+13982,14435
+4788,4431
+-2416,-3194
+-4718,-5298
+-2622,-2634
+873,1310
+2728,3173
+1930,2016
+-268,-551
+-1793,-2146
+-1536,-1646
+-44,149
+1225,1510
+1251,1365
+216,80
+-841,-1074
+-1022,-1133
+-307,-212
+564,757
+829,935
+349,282
+-361,-522
+-663,-762
+-357,-312
+210,344
+519,612
+342,315
+-101,-212
+-395,-481
+-311,-298
+25,114
+291,368
+272,270
+26,-46
+-205,-274
+-228,-234
+-57,-1
+136,196
+184,196
+71,29
+-82,-134
+-142,-158
+-74,-44
+43,85
+104,122
+69,49
+-16,-49
+-72,-90
+-60,-47
+-2,24
+46,64
+48,40
+11,-6
+-26,-43
+-36,-30
+-13,-5
+18,29
+39,20
+36,12
+23,-22
+4,-20
+0,-23
+-5,-9"""
 
-    h = np.zeros_like(t)
+data = data.replace('\n', ' ').replace(',', ' ')
+data_int = [int(x) for x in data.split()]
+tx_data = []
+rx_data = []
+for i, d in enumerate(data_int):
+    if d % 2 == 0:
+        tx_data.append(d)
+    else:
+        rx_data.append(d)
 
-    for i, ti in enumerate(t):
-        if ti == 0:
-            h[i] = 1 - beta + 4*beta/np.pi
-        elif abs(ti) == T/(4*beta):
-            h[i] = (beta/np.sqrt(2)) * (
-                (1 + 2/np.pi) * np.sin(np.pi/(4*beta)) +
-                (1 - 2/np.pi) * np.cos(np.pi/(4*beta))
-            )
-        else:
-            num = (np.sin(np.pi*ti*(1-beta)/T) +
-                   4*beta*ti/T *
-                   np.cos(np.pi*ti*(1+beta)/T))
-            den = np.pi*ti*(1-(4*beta*ti/T)**2)/T
-            h[i] = num / den
+print("tx_sum {}".format(np.sum(tx_data)))
+print("rx_sum {}".format(np.sum(tx_data)))
+print("log2 ac rx {}".format(np.log2(np.sum(tx_data))))
 
-    return h
+"""
 
-# Example
-h = rrc_filter(beta=0.35, span=8, sps=8)
-
-# Frequency response
-H = np.fft.fftshift(np.fft.fft(h))
-f = np.linspace(-0.5, 0.5, len(H))
-
-plt.figure()
-plt.plot(h)
-plt.title("RRC impulse response")
-
-plt.figure()
-plt.plot(f, np.abs(H))
-plt.title("Frequency response")
-plt.show()
+total = np.sum(data_int)
+print("total sum {}".format(total))
+print("log_2 of sum {}".format(np.log2(total)))
+print()
+"""

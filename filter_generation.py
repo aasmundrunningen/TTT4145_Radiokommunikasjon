@@ -5,7 +5,12 @@ import matplotlib.pyplot as plt
 
 path = "RCC_filter.ftr"
 
-def RRcos_filter_2(beta, span, sps):
+#from https://github.com/analogdevicesinc/education_tools/blob/master/pluto/python/power_supply_noise_sniffer/libiio-power_supply_noise_sniffer/LTE20_MHz.ftr
+#The taps for TX and taps for RX sums up to 84664 so this is probably the scaling of the filter
+normalisation_sum_adam_pluto = 84664 
+
+
+def RRcos_filter(beta, span, sps):
     #formula from https://engineering.purdue.edu/~ee538/SquareRootRaisedCosine.pdf page 3
     #beta = roll_off_factor
     #span = filter length in symbols
@@ -26,17 +31,19 @@ def RRcos_filter_2(beta, span, sps):
 
 def generate_filter_file(taps, tx_gain, rx_gain, interpolation_rate, demodulation_rate, tx_bandwidth, rx_bandwidth, path):
     #making header
+
+    taps = np.int16(np.round(taps / np.sum(taps) * normalisation_sum_adam_pluto)) #normalisation of filter
     with open(path, "w") as file:
         file.write("TX 3 GAIN {} INT {} #header for TX\n".format(tx_gain,interpolation_rate))
         file.write("RX 3 GAIN {} DEC {} #header for TX\n".format(rx_gain,demodulation_rate))
         file.write("BWTX {}\n".format(tx_bandwidth))
         file.write("BWRX {}\n".format(rx_bandwidth))
-        for tap in np.int16(np.round(taps*(2**15-1),decimals=0)):
-            file.write("{}, {}\n".format(tap, tap)) #rounds the taps to 16bit signed integer
+        for tap in taps:
+            file.write("{}, {}\n".format(tap, tap))
 
 
 
-t, RRC_t, RRC_f = RRcos_filter_2(beta=0.7, span=5, sps=4)
+t, RRC_t, RRC_f = RRcos_filter(beta=0.7, span=5, sps=4)
 
 generate_filter_file(taps=RRC_t,
                      tx_gain=0,
@@ -59,8 +66,6 @@ ax2.legend()
 ax2.grid()
 
 plt.show()
-
-
 
 
 
