@@ -4,7 +4,7 @@ config_path = "config.ini"
 
 
 def read_config_parameter(module, value):
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
     config.read(config_path)
     return config.get(module, value)
 

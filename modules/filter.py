@@ -50,7 +50,7 @@ def get_RRcos_filter_taps(beta, span, sps):
     #includes error handling for zero denominations by shifting the t value by a fraction
     zero_denominator_condition = [np.abs(4*beta*t_/T_s) < 1e-6 or np.abs(1-(4*beta*t_/T_s)**2) < 1e-6 for t_ in t]
     h_t = np.piecewise(t, zero_denominator_condition, [p_zero_denominator, p])
-    h_t = h_t / np.sum(h_t) #normalization
+    h_t = h_t / np.sum(np.pow(h_t,2)) #normalization for energy
 
     h_f = np.fft.fftshift(np.fft.fft(h_t))
     return t, h_t, h_f

@@ -1,7 +1,6 @@
 import numpy as np
 import math
+from modules.config import read_config_parameter
 
-m = 4.1
 
-print((m+0.1 + m/2)%m-m/2)
-print((m-0.1 + m/2)%m-m/2)
+print(np.random.poisson(0.01, 100))

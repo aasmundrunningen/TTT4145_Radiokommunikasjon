@@ -8,7 +8,7 @@ import math
 from modules.modulation import modulator, demodulator, Modulations, modulator_self_test
 from modules.filter import get_RRcos_filter_taps, plot_filter, tx_filter, rx_filter
 from modules.config import read_config_parameter
-from modules.syncronisation import downsampler, freq_sync
+from modules.syncronisation import downsampler, freq_sync, course_freq_sync
 
 simulation = int(read_config_parameter("simulator", "simulation")) #True if simulation is running
 
@@ -18,10 +18,10 @@ def channel_simulator(tx_data):
     sps_tx = int(read_config_parameter("filter", "sps_tx"))
     channel_delay = float(read_config_parameter("simulator", "channel_delay")) #normalized to symboltime
     phase_offsett = float(read_config_parameter("simulator", "phase_offsett"))
-    frequency_difference = float(read_config_parameter("simulator", "frequency_difference"))
+    frequency_accuracy_ppm = float(read_config_parameter("simulator", "frequency_accuracy_ppm"))
     symboles_per_second = float(read_config_parameter("general", "symboles_per_second"))
     carrier_frequency = float(read_config_parameter("general", "carrier_frequency"))
-    
+    noise_level = float(read_config_parameter("simulator", "noise_level"))
     channel_data = sp.signal.resample_poly(tx_data, up=sps_rx, down=sps_tx) #resamples the data to correct rx sampling rate
     
     
@@ -33,8 +33,13 @@ def channel_simulator(tx_data):
                              np.linspace(0, np.size(channel_data), np.size(channel_data)),
                              channel_data)
     
+    #adds phase and frequency error
     t = np.linspace(0,np.size(channel_data)/(sps_rx*symboles_per_second), np.size(channel_data))
-    channel_data = channel_data * np.exp(1j*(phase_offsett + 2*np.pi*frequency_difference*carrier_frequency*t))
+    channel_data = channel_data * np.exp(1j*(phase_offsett + 2*np.pi*frequency_accuracy_ppm*(1e-6)*carrier_frequency*t))
+
+    #adds AWGN
+    channel_data = channel_data + np.random.normal(0, noise_level, np.size(channel_data)) + 1j*np.random.normal(0, noise_level, np.size(channel_data))
+
 
 
     return channel_data
@@ -45,9 +50,10 @@ def plot_eye_diagram(data, sps):
     plt.show()
 
 def plot_constalation_diagram(data):
+    lim = np.max([np.real(data), np.imag(data)])*1.2
     plt.plot(np.real(data),np.imag(data), ".")
-    plt.xlim((-2,2))
-    plt.ylim((-2,2))
+    plt.xlim((-lim,lim))
+    plt.ylim((-lim,lim))
     plt.title("Constalation diagram")
     plt.grid()
     plt.show()
@@ -55,18 +61,15 @@ def plot_constalation_diagram(data):
 
 #channel syncronisation
 if True:
-    N = 100
+    N = 160
     data = np.random.randint(0,2,N)
     data_modulated = modulator(data, Modulations.BPSK)
-    rx = downsampler(rx_filter(channel_simulator(tx_filter(data_modulated))))
+    #adds zeros to middle of datastream
+    data_modulated = np.concatenate([data_modulated[:N//2], np.zeros(N//2), data_modulated[N//2:]])
+    rx = downsampler(rx_filter(course_freq_sync(channel_simulator(tx_filter(data_modulated)))))
     plot_constalation_diagram(rx)
     rx_adjusted = freq_sync(rx)
     plot_constalation_diagram(rx_adjusted)
-
-    #FFT_rx = sp.fft.fftshift(sp.fft.fft(rx))
-    #FFT_freq = sp.fft.fftshift(sp.fft.fftfreq(np.size(rx)))
-    #plt.plot(FFT_freq, FFT_rx)
-    #plt.show()
 
     
 

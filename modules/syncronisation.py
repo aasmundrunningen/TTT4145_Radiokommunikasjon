@@ -79,4 +79,19 @@ def freq_sync(data):
 
     return data_out
 
+def course_freq_sync(data):
+    power_in_out_of_band = 0.05 # percentage of power outside of bandwidth 
+    sps_rx = int(read_config_parameter("filter", "sps_rx"))
+    symbolrate = int(read_config_parameter("general", "symboles_per_second"))
+    
+    time_per_sample = 1/(symbolrate*sps_rx)
 
+    data_pds = np.pow(np.fft.fft(data), 2)
+    cumulative_power = np.cumsum(data_pds)
+    total_power = cumulative_power[-1]
+    f_low = np.where(cumulative_power > cumulative_power[-1]*power_in_out_of_band)[0][0]
+    f_high = np.where(cumulative_power > cumulative_power[-1]*(1-power_in_out_of_band))[0][0]
+    center_frequency = f_high - f_low
+    t = np.linspace(0, time_per_sample*np.size(data), np.size(data))
+    data = data * np.exp(-1j*2*np.pi*center_frequency*t)
+    return data
