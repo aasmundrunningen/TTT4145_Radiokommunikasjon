@@ -16,5 +16,3 @@ def print_config():
         print("\033[1;4m{}\033[0m".format(section))
         for key, value in config[section].items():
             print("{}: {}".format(key, value))
-
-print_config()

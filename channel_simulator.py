@@ -3,28 +3,39 @@ import scipy as sp
 import numpy as np
 from enum import Enum
 import matplotlib.pyplot as plt
+import math
 
 from modules.modulation import modulator, demodulator, Modulations, modulator_self_test
 from modules.filter import get_RRcos_filter_taps, plot_filter, tx_filter, rx_filter
 from modules.config import read_config_parameter
+from modules.syncronisation import downsampler, freq_sync
+
+simulation = int(read_config_parameter("simulator", "simulation")) #True if simulation is running
 
 
 def channel_simulator(tx_data):
     sps_rx = int(read_config_parameter("filter", "sps_rx"))
     sps_tx = int(read_config_parameter("filter", "sps_tx"))
-    delay_in_samples = float(read_config_parameter("simulator", "delay_in_samples"))
+    channel_delay = float(read_config_parameter("simulator", "channel_delay")) #normalized to symboltime
     phase_offsett = float(read_config_parameter("simulator", "phase_offsett"))
-    frequency_offsett = float(read_config_parameter("simulator", "frequency_offsett"))
+    frequency_difference = float(read_config_parameter("simulator", "frequency_difference"))
     symboles_per_second = float(read_config_parameter("general", "symboles_per_second"))
+    carrier_frequency = float(read_config_parameter("general", "carrier_frequency"))
     
     channel_data = sp.signal.resample_poly(tx_data, up=sps_rx, down=sps_tx) #resamples the data to correct rx sampling rate
     
     
     #adds delay
-    total_samples_delay = delay_in_samples // sps_rx
-    channel_data = np.concatenate()
-    rest_delay = delay_in_samples % sps_rx
+    samples_delay = math.floor(channel_delay * sps_rx)
+    sub_sample_delay = channel_delay * sps_rx - samples_delay #the rest delay
+    channel_data = np.concatenate((np.zeros(samples_delay), channel_data)) #adds zeros to the front to add delay
+    channel_data = np.interp(np.linspace(sub_sample_delay, np.size(channel_data)+sub_sample_delay, np.size(channel_data)),
+                             np.linspace(0, np.size(channel_data), np.size(channel_data)),
+                             channel_data)
     
+    t = np.linspace(0,np.size(channel_data)/(sps_rx*symboles_per_second), np.size(channel_data))
+    channel_data = channel_data * np.exp(1j*(phase_offsett + 2*np.pi*frequency_difference*carrier_frequency*t))
+
 
     return channel_data
 
@@ -38,20 +49,26 @@ def plot_constalation_diagram(data):
     plt.xlim((-2,2))
     plt.ylim((-2,2))
     plt.title("Constalation diagram")
+    plt.grid()
     plt.show()
 
 
 #channel syncronisation
-if False:
-    N = 10
+if True:
+    N = 100
     data = np.random.randint(0,2,N)
     data_modulated = modulator(data, Modulations.BPSK)
-    rx = rx_filter(channel_simulator(tx_filter(data_modulated)))
-    FFT_rx = sp.fft.fftshift(sp.fft.fft(rx))
-    FFT_freq = sp.fft.fftshift(sp.fft.fftfreq(np.size(rx)))
-    plt.plot(FFT_freq, FFT_rx)
-    plt.show()
+    rx = downsampler(rx_filter(channel_simulator(tx_filter(data_modulated))))
+    plot_constalation_diagram(rx)
+    rx_adjusted = freq_sync(rx)
+    plot_constalation_diagram(rx_adjusted)
 
+    #FFT_rx = sp.fft.fftshift(sp.fft.fft(rx))
+    #FFT_freq = sp.fft.fftshift(sp.fft.fftfreq(np.size(rx)))
+    #plt.plot(FFT_freq, FFT_rx)
+    #plt.show()
+
+    
 
 
 #check that there is no ISI in ideal circumstances
@@ -70,40 +87,18 @@ if False:
     plt.show()
 
 
-def downsampler(data):
-    sps = int(read_config_parameter("filter", "sps_rx"))
-    down_sampled_data = []
-    
-    time = 0 #normalized to symboltime, so 1 is one sample periode
 
-    step = sps #Distance to move for next symbol
-
-    kp = 0.01
-    ki = 0.01
-    integral = 0
-
-    while time < len(data)-sps:
-        y_curr = np.interp(time         , range(len(data)),data)
-        y_mid  = np.interp(time - step/2, range(len(data)),data)
-        y_prev = np.interp(time - step  , range(len(data)),data)
-        e = np.real(y_mid)*(np.real(y_curr)-np.real(y_prev)) #Gardner timing error detector algorithm
-        integral = integral + e
-        step = sps + ki*integral + kp*e #pi controller for step movement
-        time = time + step
-        print(time)
-        down_sampled_data.append(y_curr)
-
-    return np.array(down_sampled_data)
 
 
 #eye diagram shit, for package detection
-if True:
-    N = 10
+if False:
+    N = 100
     data = np.random.randint(0,2,N)
     data_modulated = modulator(data, Modulations.BPSK)
     rx = rx_filter(channel_simulator(tx_filter(data_modulated)))
     down_sampled_rx = downsampler(rx)
     plt.plot(np.abs(down_sampled_rx))
+    plt.title("absolute value of samples")
     plt.show()
     #plot_eye_diagram(rx[50:-50], int(read_config_parameter("filter", "sps_rx")))
 

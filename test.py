@@ -1,8 +1,7 @@
 import numpy as np
+import math
 
-upsampling_factor = 5
-x = [1, -1, 1]
-x_upsampled = np.zeros(np.size(x)*upsampling_factor)
-x_upsampled[::upsampling_factor] = x
-print(x)
-print(x_upsampled)
+m = 4.1
+
+print((m+0.1 + m/2)%m-m/2)
+print((m-0.1 + m/2)%m-m/2)
