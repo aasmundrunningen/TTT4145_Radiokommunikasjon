@@ -4,10 +4,16 @@ import matplotlib.pyplot as plt
 
 simulation = read_config_parameter("simulator", "simulation")
 
+sps_rx = int(read_config_parameter("filter", "sps_rx"))
+symbolrate = int(read_config_parameter("general", "symboles_per_second"))
+fs = symbolrate*sps_rx
+
+
+
 def downsampler(data):
     sps = int(read_config_parameter("filter", "sps_rx"))
-    kp = float(read_config_parameter("downsampler", "kp_symbolsync"))
-    ki = float(read_config_parameter("downsampler", "ki_symbolsync"))
+    kp_freq_sync = float(read_config_parameter("downsampler", "kp_symbolsync"))
+    ki_freq_sync = float(read_config_parameter("downsampler", "ki_symbolsync"))
 
     plot_eye = int(read_config_parameter("downsampler", "plot_eye"))
     plot_sampling_error = int(read_config_parameter("downsampler", "plot_sampling_error"))
@@ -33,7 +39,7 @@ def downsampler(data):
         y_prev = np.interp(time - step  , range(len(data)),data)
         e = np.real(y_mid)*(np.real(y_curr)-np.real(y_prev)) #Gardner timing error detector algorithm
         integral = integral + e
-        step = sps - ki*integral - kp*e #pi controller for step movement
+        step = sps - ki_freq_sync*integral - kp_freq_sync*e #pi controller for step movement
         time = time + step
         
         down_sampled_data.append(y_curr*10) #downsampling and digitalization, adds 10 to increase signal strength to 1 for ideal case
@@ -52,15 +58,22 @@ def downsampler(data):
         plt.show()
     return np.array(down_sampled_data)
 
+def matched_filter_synchronization(data):
+    pilot_code_symboltime = int(read_config_parameter("matched_filter_symbol_sync", "pilot_code"), base=16)
+    sps_rx = int(read_config_parameter("filter", "sps_rx"))
 
+
+
+
+
+plot_error_freq_sync = int(read_config_parameter("freq_sync", "plot_error"))
+kp_freq_sync = float(read_config_parameter("freq_sync", "kp"))
+ki_freq_sync = float(read_config_parameter("freq_sync", "ki"))
 def freq_sync(data):
     #costas loop
-    plot_error = int(read_config_parameter("freq_sync", "plot_error"))
-    if plot_error:
+    if plot_error_freq_sync:
         e2_array = np.zeros_like(data)
         true_phase_offsett = float(read_config_parameter("simulator", "phase_offsett"))
-    kp = float(read_config_parameter("freq_sync", "kp"))
-    ki = float(read_config_parameter("freq_sync", "ki"))
     e1_int = 0
     e2 = 0
     data_out = np.zeros_like(data)
@@ -68,30 +81,37 @@ def freq_sync(data):
         data_out[i] = d*np.exp(-1j*e2)
         e1 = np.real(data_out[i]) * np.imag(data_out[i])
         e1_int = e1_int + e1
-        e2 = kp*e1 + ki*e1_int
-        if plot_error:
+        e2 = kp_freq_sync*e1 + ki_freq_sync*e1_int
+        if plot_error_freq_sync:
             e2_array[i] = e2
     
-    if plot_error:
+    if plot_error_freq_sync:
         plt.plot(e2_array)
         plt.plot(np.zeros_like(e2_array)+true_phase_offsett)
         plt.show()
 
     return data_out
 
-def course_freq_sync(data):
-    power_in_out_of_band = 0.05 # percentage of power outside of bandwidth 
-    sps_rx = int(read_config_parameter("filter", "sps_rx"))
-    symbolrate = int(read_config_parameter("general", "symboles_per_second"))
-    
-    time_per_sample = 1/(symbolrate*sps_rx)
 
-    data_pds = np.pow(np.fft.fft(data), 2)
-    cumulative_power = np.cumsum(data_pds)
-    total_power = cumulative_power[-1]
-    f_low = np.where(cumulative_power > cumulative_power[-1]*power_in_out_of_band)[0][0]
-    f_high = np.where(cumulative_power > cumulative_power[-1]*(1-power_in_out_of_band))[0][0]
-    center_frequency = f_high - f_low
-    t = np.linspace(0, time_per_sample*np.size(data), np.size(data))
-    data = data * np.exp(-1j*2*np.pi*center_frequency*t)
+
+plot_course_freq_sync = int(read_config_parameter("course_freq_sync", "plot_freq_spectrum"))
+def course_freq_sync(data):
+    
+    psd = np.abs(np.fft.fftshift(np.fft.fft(np.pow(data,4)))) #to power of 4 to remove modulation for QPSK
+    f = np.linspace(-fs/2.0, fs/2.0, len(psd))
+    t = np.linspace(0, 1/fs * np.size(data), np.size(data))
+    max_freq = f[np.argmax(psd)]
+    data = data * np.exp(-1j*2*np.pi*t*max_freq/4) #quarter of maxfreq due to squaring moving peak to 4*delta_f
+    
+    if plot_course_freq_sync:
+        psd_corrected = np.fft.fftshift(np.fft.fft(np.pow(data,4))) #squared bpsk removes the modulation, only carrier ramains. Need to be cubed for qpsk
+        plt.plot(f, np.abs(psd), label="Original PSD")
+        plt.plot(f, np.abs(psd_corrected), label="Adjusted PSD")
+        plt.xlabel("Frequency [Hz]")
+        plt.ylabel("|PSD|")
+        plt.legend()
+        #plt.vlines(max_freq, 0, )
+        plt.title("Power density spectrum of recived signal")
+        plt.show()
     return data
+

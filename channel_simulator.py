@@ -5,10 +5,11 @@ from enum import Enum
 import matplotlib.pyplot as plt
 import math
 
-from modules.modulation import modulator, demodulator, Modulations, modulator_self_test
+from modules.modulation import modulator, demodulator
 from modules.filter import get_RRcos_filter_taps, plot_filter, tx_filter, rx_filter
 from modules.config import read_config_parameter
 from modules.syncronisation import downsampler, freq_sync, course_freq_sync
+from modules.data_detector import add_preamble_to_data, preamble_detector
 
 simulation = int(read_config_parameter("simulator", "simulation")) #True if simulation is running
 
@@ -58,9 +59,43 @@ def plot_constalation_diagram(data):
     plt.grid()
     plt.show()
 
+def make_modulated_data():
+    N = int(read_config_parameter("simulator", "data_points_in_package"))
+    M = int(read_config_parameter("simulator", "number_of_data_packages"))
+    r = float(read_config_parameter("simulator", "sending_factor"))
+    data = []
+    for i in range(M):
+        data = np.concatenate((data, modulator(np.random.randint(0,2,N), Modulations.QPSK), np.zeros(int(N/r))))
+    
+    return data
+
+    
+
+#checking the preamble detector
+if True:
+    data_package = np.random.randint(0,2,500)
+    data_with_preamble = add_preamble_to_data(data_package)
+    modulated_tx = modulator(data_with_preamble)
+    rx_data = rx_filter(course_freq_sync(channel_simulator(tx_filter(modulated_tx))))
+    print(preamble_detector(rx_data))
+
+
+
+
+#printing data
+if False:
+    data = make_modulated_data()
+    plt.plot(np.abs(data))
+    plt.show()
+
+
+#course frequency compensation test
+if False:
+    data_modulated = make_modulated_data()
+    rx = rx_filter(course_freq_sync(channel_simulator(tx_filter(data_modulated))))
 
 #channel syncronisation
-if True:
+if False:
     N = 160
     data = np.random.randint(0,2,N)
     data_modulated = modulator(data, Modulations.BPSK)
