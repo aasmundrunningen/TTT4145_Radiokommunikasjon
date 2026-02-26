@@ -1,6 +1,3 @@
-import os
-os.environ["SD_ENABLE_ASIO"] = "1"   #Dette må skrives før en importerer sounddevice. Denne linjen
-#gjør at sounddevice bruker ASIO på windows, som gjør at det blir "kanskje litt" mindre latency. 
 import numpy as np
 import opuslib
 import scipy.signal as sig
