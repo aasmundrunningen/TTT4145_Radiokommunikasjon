@@ -65,19 +65,24 @@ def make_modulated_data():
     r = float(read_config_parameter("simulator", "sending_factor"))
     data = []
     for i in range(M):
-        data = np.concatenate((data, modulator(np.random.randint(0,2,N), Modulations.QPSK), np.zeros(int(N/r))))
+        data = np.concatenate((data, modulator(np.random.randint(0,2,N)), np.zeros(int(N/r))))
     
     return data
 
     
 
 #checking the preamble detector
-if True:
+if False:
     data_package = np.random.randint(0,2,500)
     data_with_preamble = add_preamble_to_data(data_package)
     modulated_tx = modulator(data_with_preamble)
     rx_data = rx_filter(course_freq_sync(channel_simulator(tx_filter(modulated_tx))))
-    print(preamble_detector(rx_data))
+    preambled_data = preamble_detector(rx_data)
+    plt.plot(np.linspace(0, np.size(preambled_data)/int(read_config_parameter("filter", "sps_rx")),np.size(preambled_data)), np.real(preambled_data))
+    plt.plot(np.linspace(0, np.size(preambled_data)/int(read_config_parameter("filter", "sps_rx")),np.size(preambled_data)), np.imag(preambled_data))
+    plt.grid()
+    plt.show()
+    downsampled_data = downsampler(preambled_data)
 
 
 
@@ -109,52 +114,23 @@ if False:
     
 
 
-#check that there is no ISI in ideal circumstances
-if False:
-    N = 10
-    data = np.random.randint(0,2,N)
-    data_modulated = modulator(data, Modulations.BPSK)
-    for i in range(N):
-        d = np.zeros(N)
-        d[i] = data_modulated[i]
-        rx_d = rx_filter(channel_simulator(tx_filter(d)))
-        plt.plot(rx_d, "--")
-    rx = rx_filter(channel_simulator(tx_filter(data_modulated)))
-    plt.plot(rx, "-")
-    plt.grid()
-    plt.show()
-
-
-
-
-
-#eye diagram shit, for package detection
-if False:
+#check that there is no ISI in ideal circumstances, works for QPSK
+if True:
     N = 100
     data = np.random.randint(0,2,N)
-    data_modulated = modulator(data, Modulations.BPSK)
+    data_modulated = modulator(data)
     rx = rx_filter(channel_simulator(tx_filter(data_modulated)))
-    down_sampled_rx = downsampler(rx)
-    plt.plot(np.abs(down_sampled_rx))
-    plt.title("absolute value of samples")
-    plt.show()
-    #plot_eye_diagram(rx[50:-50], int(read_config_parameter("filter", "sps_rx")))
-
-
-if False:
-    print("input data size: {}".format(np.shape(data)))
-    print("tx data size: {}".format(np.shape(tx_data)))
-    print("rx data shape: {}".format(np.shape(rx_data)))
-
-
-
-    fig, (ax1, ax2, ax3) = plt.subplots(1,3)
-    ax1.plot(np.real(tx_data), label="tx")
-    ax2.plot(np.real(rx_data), label="rx")
-    ax3.plot(np.real(rx_filtered_data), label="rx filtered")
-
-    ax1.legend()
-    ax2.legend()
-    ax3.legend()
-    plt.legend()
+    fig, ax = plt.subplots(1, 2)
+    t = np.linspace(0, np.size(rx)/int(read_config_parameter("filter", "sps_rx")),np.size(rx)) #time points in symboltime
+    for i in range(N//2):
+        d = np.zeros(N//2, dtype=complex)
+        d[i] = data_modulated[i]
+        rx_d = rx_filter(channel_simulator(tx_filter(d)))
+        ax[0].plot(t, np.real(rx_d), "--")
+        ax[1].plot(t, np.imag(rx_d), "--")
+    ax[0].plot(t, np.real(rx), "-")
+    ax[1].plot(t, np.imag(rx), "-")
+    ax[0].set_title("Real part")
+    ax[1].set_title("Imaginary part")
+    plt.grid()
     plt.show()

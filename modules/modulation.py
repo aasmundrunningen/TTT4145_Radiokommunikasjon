@@ -1,6 +1,6 @@
 import numpy as np
 from enum import Enum
-from modules.config import read_config_parameter
+from config import read_config_parameter
 
 modulation_scheme = str(read_config_parameter("general", "modulation_scheme"))
 

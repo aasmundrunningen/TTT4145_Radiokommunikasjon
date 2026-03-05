@@ -1,6 +1,7 @@
 import numpy as np
-from modules.config import read_config_parameter
+from config import read_config_parameter
 import matplotlib.pyplot as plt
+import scipy as sp
 
 simulation = read_config_parameter("simulator", "simulation")
 
@@ -10,60 +11,49 @@ fs = symbolrate*sps_rx
 
 
 
-def downsampler(data):
-    sps = int(read_config_parameter("filter", "sps_rx"))
-    kp_freq_sync = float(read_config_parameter("downsampler", "kp_symbolsync"))
-    ki_freq_sync = float(read_config_parameter("downsampler", "ki_symbolsync"))
+sps = int(read_config_parameter("filter", "sps_rx"))
+kp_downsampler = float(read_config_parameter("downsampler", "kp_symbolsync"))
+ki_downsampler = float(read_config_parameter("downsampler", "ki_symbolsync"))
+plot_eye = int(read_config_parameter("downsampler", "plot_eye"))
+plot_sampling_error = int(read_config_parameter("downsampler", "plot_sampling_error"))
+package_size = int(read_config_parameter("general", "package_size"))
+downsampled_data = np.zeros(package_size, dtype=complex)
+downsampler_interpolation_rate = int(read_config_parameter("downsampler", "interpolation_rate"))
 
-    plot_eye = int(read_config_parameter("downsampler", "plot_eye"))
-    plot_sampling_error = int(read_config_parameter("downsampler", "plot_sampling_error"))
+def downsampler(data):
+    if data is None: #no data in package
+        return None
 
     if simulation:
         #parameters for simulation purpose
-        true_channel_delay = float(read_config_parameter("simulator", "channel_delay")) #normalized to symboltime
-        sampling_error = [] #array for calculating sampling error relative to simulator
-    
-    
-    down_sampled_data = []
-    time = 0 #normalized to samplingtime, so 1 is one sample periode
+        steps = []
+        times = []
 
-    step = sps #Distance to move for next symbol
-
-    integral = 0
-
-
-
-    while time < len(data)-sps:
-        y_curr = np.interp(time         , range(len(data)),data)
-        y_mid  = np.interp(time - step/2, range(len(data)),data)
-        y_prev = np.interp(time - step  , range(len(data)),data)
-        e = np.real(y_mid)*(np.real(y_curr)-np.real(y_prev)) #Gardner timing error detector algorithm
+    integral = 0    
+    data_interp = np.interp(np.linspace(0, np.size(data), np.size(data)*downsampler_interpolation_rate), range(np.size(data)), data)
+    downsampled_data[0] = data_interp[0]
+    step = sps*downsampler_interpolation_rate
+    time = step #normalized to samplingtime, so 1 is one sample periode
+    for i in range(1, package_size): #goes trough the number of datapoints expected
+        y_mid  = data_interp[int(time - step/2)]
+        downsampled_data[i] = data_interp[int(time)]
+        
+        e = np.real(y_mid)*(np.real(downsampled_data[i])-np.real(downsampled_data[i-1])) #Gardner timing error detector algorithm
         integral = integral + e
-        step = sps - ki_freq_sync*integral - kp_freq_sync*e #pi controller for step movement
+        step = sps*downsampler_interpolation_rate - ki_downsampler*integral - kp_downsampler*e #pi controller for step movement
         time = time + step
         
-        down_sampled_data.append(y_curr*10) #downsampling and digitalization, adds 10 to increase signal strength to 1 for ideal case
-        
-        if simulation:
-            sampling_error.append((time - true_channel_delay*sps + sps/2)%sps - sps/2) #calculates the error in sampling time
+        steps.append(step)
+        times.append(int(time))
 
-        if plot_eye:
-            plt.plot(np.interp(np.linspace(time-sps/2, time+sps/2, 5), range(len(data)), data))
+        if plot_eye and i < 40:
+            plt.plot(data_interp[int(time - step/2):int(time+step/2)])
     
     if plot_eye:
         plt.show()
-    if plot_sampling_error:
-        plt.plot(sampling_error)
-        plt.title("sampling error")
-        plt.show()
-    return np.array(down_sampled_data)
-
-def matched_filter_synchronization(data):
-    pilot_code_symboltime = int(read_config_parameter("matched_filter_symbol_sync", "pilot_code"), base=16)
-    sps_rx = int(read_config_parameter("filter", "sps_rx"))
-
-
-
+    plt.plot(steps)
+    plt.show()
+    return downsampled_data
 
 
 plot_error_freq_sync = int(read_config_parameter("freq_sync", "plot_error"))

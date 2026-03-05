@@ -3,7 +3,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from scipy.signal import upfirdn
-from modules.config import read_config_parameter
+from config import read_config_parameter
 
 
 
