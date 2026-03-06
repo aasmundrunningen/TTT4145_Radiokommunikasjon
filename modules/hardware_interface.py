@@ -90,15 +90,16 @@ class Radio():
 
     def recive_chain(self):
         print("Radio: starts recive chain thread")
-        new_package = rx_filter(self.get_rx_package())
-        
+        data = np.zeros(int(read_config_parameter("adalm_pluto", "rx_buffer_size"))) #old data, used to look for preamble
+        new_data = np.zeros(int(read_config_parameter("adalm_pluto", "rx_buffer_size")))
         while not self.stop:
-            new_package = rx_filter(self.get_rx_package())
-            peaks = self.preamble.detector(new_package) 
+            data = new_data
+            new_data = rx_filter(self.get_rx_package())
+            peaks = self.preamble.detector(data, new_data) 
             if len(peaks) > 0:
                 self.rx_package_counter += 1
             try:
-                self._fft_queue.put_nowait(new_package)
+                self._fft_queue.put_nowait(new_data)
                 None
             except:
                 continue
@@ -159,21 +160,17 @@ if __name__ == "__main__":
     print("started program")
     radio = Radio()
     #radio.enable_fft_plot()
-    #radio.preamble.enable_correlation_plot()
+    radio.preamble.enable_correlation_plot()
 
     package_size = int(read_config_parameter("general", "package_size"))
     data = np.random.randint(0,2,package_size)
 
     try:
         while True:
-            #print("sending data")
             if radio.preamble.calibrated == True: #no point in sending before calibration is finished
                 radio.send_tx_package(data)
                 print(f"\r transmitted packages {radio.tx_package_counter}, recived packages {radio.rx_package_counter}", end="")
             plt.pause(1)
-            
-            #time.sleep(1)
-            #print("sending data")
     except KeyboardInterrupt:
         radio.stop_radio()
         del radio

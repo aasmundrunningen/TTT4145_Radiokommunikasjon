@@ -38,9 +38,8 @@ class PREAMBLE():
         
 
 
-    def detector(self, data):
-        conc_data = np.concatenate((self.old_data[self.peak_to_start_of_signal:], data)) #ensures that it handles preambles in between packages
-        self.old_data = data
+    def detector(self, data, new_data):
+        conc_data = np.concatenate((data, new_data[:-self.peak_to_start_of_signal])) #ensures that it handles preambles in between packages
         #data_power = np.sqrt(np.sum(np.pow(np.abs(data), 2)) * np.sum(np.pow(np.abs(self.reference_signal),2)))
         noise_floor = np.median(np.abs(conc_data))
         cross_cor = np.abs(sp.signal.correlate(conc_data, self.reference_signal, mode="valid"))
@@ -71,6 +70,7 @@ class PREAMBLE():
         self.corr_line,   = self.ax.plot([], [], label="Correlation")
         self.peak_markers, = self.ax.plot([], [], 'rx', label="Detected Peaks")
         self.thresh_line = self.ax.axhline(y=0, color='r', linestyle='--', label="Threshold")
+        self.ax.legend()
         self.ax.set_ylim(0, 100) # Adjust based on your signal levels
         self.ax.set_xlim(-1, 1)
 
@@ -97,7 +97,8 @@ class PREAMBLE():
             
             
             #Dynamic scaling
-            self.ylim_plot += (np.max(data) - self.ylim_plot)*0.1
+            #self.ylim_plot += (np.max(data) - self.ylim_plot)*0.1
+            self.ylim_plot = 800
             self.ax.set_ylim(0, self.ylim_plot * 1.5)
             
             return self.corr_line, self.thresh_line, self.peak_markers
