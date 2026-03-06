@@ -2,7 +2,7 @@
 import scipy as sp
 from config import read_config_parameter
 from modulation import modulator
-from filter import rx_filter, tx_filter
+from filter import FILTERS
 import numpy as np
 import matplotlib.pyplot as plt
 import queue
@@ -17,7 +17,9 @@ class PREAMBLE():
         sps_tx = int(read_config_parameter("filter", "sps_tx"))
         span = int(read_config_parameter("filter", "span"))
         modulated_preamble = modulator(self.preamble)
-        self.reference_signal = rx_filter(sp.signal.resample_poly(tx_filter(modulated_preamble), up=sps_rx, down=sps_tx))
+        filters = FILTERS()
+        self.reference_signal = filters.rx_filter(sp.signal.resample_poly(filters.tx_filter(modulated_preamble), up=sps_rx, down=sps_tx))
+        del filters
         
         self.peak_to_start_of_signal = -np.size(self.reference_signal)+1 + sps_rx*span #don't ask, i do not know why it is not sps_rx*span/2
 

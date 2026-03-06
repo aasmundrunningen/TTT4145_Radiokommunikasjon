@@ -5,8 +5,9 @@ import queue
 import numpy as np
 import matplotlib.pyplot as plt
 from modulation import demodulator, modulator
-from filter import tx_filter, rx_filter
+from filter import FILTERS
 from data_detector import PREAMBLE
+from syncronisation import SYNCHRONIZATION
 import time
 
 class Radio():
@@ -19,18 +20,15 @@ class Radio():
         
         self._sdr.sample_rate = self.sample_rate
         print("Radio: sampling rate: {} MsPs".format(self.sample_rate/1e6))
-        self._sdr.tx_lo                       = int(float(read_config_parameter("adalm_pluto", "center_freq")))
+        self._sdr.tx_lo = int(float(read_config_parameter("adalm_pluto", "rx_recive_freq"))) #int(float(read_config_parameter("adalm_pluto", "tx_lo_freq")))
         self._sdr.tx_hardwaregain_chan0       = int(read_config_parameter("adalm_pluto", "tx_gain"))
 
         self._sdr.gain_control_mode_chan0     = "manual"
-        self._sdr.rx_lo                       = int(float(read_config_parameter("adalm_pluto", "center_freq")))
+        self._sdr.rx_lo = int(float(read_config_parameter("adalm_pluto", "rx_lo_freq")))
         self._sdr.rx_rf_bandwidth             = int(self._sdr.sample_rate*0.8) #antialiasing
         self._sdr.rx_buffer_size              = int(float(read_config_parameter("adalm_pluto", "rx_buffer_size")))
         self._sdr.rx_hardwaregain_chan0       = int(read_config_parameter("adalm_pluto", "rx_gain"))
-
         
-        #self._sdr.rx_lo = int(915e6)
-        #self._sdr.tx_lo = int(915.5e6)
         
         self.__rx_queue = queue.Queue(maxsize=10) # Limit queue size to prevent huge lag
         self.__tx_queue = queue.Queue(maxsize=10) # Limit queue size to prevent huge lag
@@ -46,8 +44,13 @@ class Radio():
 
         self.stop = False #tells the threads to stop
 
+
+        self.preamble = PREAMBLE()
+        self.synchronization = SYNCHRONIZATION()
+        self.filters = FILTERS()
+
+
         #start threads for tx and rx, deamon tells the thread to kil if this thread dies
-        
         self.recive_chain_thread = threading.Thread(target=self.recive_chain, daemon=True)
         self.rx_thread = threading.Thread(target=self.rx, daemon=True)
         self.tx_thread = threading.Thread(target=self.tx, daemon=True)
@@ -55,7 +58,6 @@ class Radio():
         self.rx_thread.start()
         self.tx_thread.start()
 
-        self.preamble = PREAMBLE()
     
     def enable_fft_plot(self):
         # We don't start a thread here anymore!
@@ -94,7 +96,10 @@ class Radio():
         new_data = np.zeros(int(read_config_parameter("adalm_pluto", "rx_buffer_size")))
         while not self.stop:
             data = new_data
-            new_data = rx_filter(self.get_rx_package())
+            new_data = self.get_rx_package()
+            new_data = self.filters.rx_bandpass_filter(new_data)
+            new_data = self.synchronization.course_freq_sync(new_data)
+            new_data = self.filters.rx_filter(new_data)
             peaks = self.preamble.detector(data, new_data) 
             if len(peaks) > 0:
                 self.rx_package_counter += 1
@@ -109,7 +114,7 @@ class Radio():
         return self.__rx_queue.get()
 
     def send_tx_package(self, data):
-        package = tx_filter(modulator(self.preamble.add_preamble(data)))
+        package = self.filters.tx_filter(modulator(self.preamble.add_preamble(data)))
         self.__tx_queue.put(package)
         self.tx_package_counter += 1
 
@@ -160,7 +165,7 @@ if __name__ == "__main__":
     print("started program")
     radio = Radio()
     #radio.enable_fft_plot()
-    radio.preamble.enable_correlation_plot()
+    #radio.preamble.enable_correlation_plot()
 
     package_size = int(read_config_parameter("general", "package_size"))
     data = np.random.randint(0,2,package_size)

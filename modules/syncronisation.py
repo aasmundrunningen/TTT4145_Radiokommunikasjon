@@ -91,7 +91,7 @@ def course_freq_sync(data):
     f = np.linspace(-fs/2.0, fs/2.0, len(psd))
     t = np.linspace(0, 1/fs * np.size(data), np.size(data))
     max_freq = f[np.argmax(psd)]
-    data = data * np.exp(-1j*2*np.pi*t*max_freq/4) #quarter of maxfreq due to squaring moving peak to 4*delta_f
+    data = data * np.exp(1j*2*np.pi*t*max_freq/4) #quarter of maxfreq due to squaring moving peak to 4*delta_f
     
     if plot_course_freq_sync:
         psd_corrected = np.fft.fftshift(np.fft.fft(np.pow(data,4))) #squared bpsk removes the modulation, only carrier ramains. Need to be cubed for qpsk
@@ -105,3 +105,22 @@ def course_freq_sync(data):
         plt.show()
     return data
 
+
+class SYNCHRONIZATION():
+    def __init__(self):
+        buffer_size = int(read_config_parameter("adalm_pluto", "rx_buffer_size"))
+        symboles_per_second = float(read_config_parameter("general", "symboles_per_second"))
+        sps_rx = float(read_config_parameter("filter", "sps_rx"))
+        self.fs = symboles_per_second*sps_rx
+
+        self.f_for_course_freq_sync = np.fft.fftfreq(buffer_size, d=1/self.fs) #np.linspace(-self.fs/2.0, self.fs/2.0, buffer_size)
+        self.t_for_course_freq_sync = np.linspace(0, 1/self.fs * buffer_size, buffer_size)
+
+    def course_freq_sync(self, data):
+        psd = np.abs(np.fft.fft(np.pow(data,4))) #to power of 4 to remove modulation for QPSK
+        max_freq = self.f_for_course_freq_sync[np.argmax(psd)]
+        data = data * np.exp(1j*2*np.pi*self.t_for_course_freq_sync*max_freq/2) #quarter of maxfreq due to squaring moving peak to 4*delta_f
+        return data
+        
+    
+    
