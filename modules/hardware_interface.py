@@ -6,33 +6,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 from modulation import demodulator, modulator
 from filter import tx_filter, rx_filter
-from data_detector import preamble_detector, add_preamble_to_data
+from data_detector import PREAMBLE
 import time
 
 class Radio():
     def __init__(self):
-        
-        self._sdr = adi.Pluto("ip:192.168.2.1")
+        self._sdr = adi.Pluto(read_config_parameter("adalm_pluto", "ip"))
 
         self.symboles_per_second = int(read_config_parameter("general", "symboles_per_second"))
         self.sps_rx = int(read_config_parameter("filter", "sps_rx"))
         self.sample_rate = self.symboles_per_second*self.sps_rx
         
         self._sdr.sample_rate = self.sample_rate
-        print(self._sdr.sample_rate)
+        print("Radio: sampling rate: {} MsPs".format(self.sample_rate/1e6))
         self._sdr.tx_lo                       = int(float(read_config_parameter("adalm_pluto", "center_freq")))
-        print(self._sdr.tx_lo)
         self._sdr.tx_hardwaregain_chan0       = int(read_config_parameter("adalm_pluto", "tx_gain"))
-        print(self._sdr.tx_hardwaregain_chan0)
-
 
         self._sdr.gain_control_mode_chan0     = "manual"
         self._sdr.rx_lo                       = int(float(read_config_parameter("adalm_pluto", "center_freq")))
         self._sdr.rx_rf_bandwidth             = int(self._sdr.sample_rate*0.8) #antialiasing
         self._sdr.rx_buffer_size              = int(float(read_config_parameter("adalm_pluto", "rx_buffer_size")))
         self._sdr.rx_hardwaregain_chan0       = int(read_config_parameter("adalm_pluto", "rx_gain"))
-        
 
+        
+        #self._sdr.rx_lo = int(915e6)
+        #self._sdr.tx_lo = int(915.5e6)
         
         self.__rx_queue = queue.Queue(maxsize=10) # Limit queue size to prevent huge lag
         self.__tx_queue = queue.Queue(maxsize=10) # Limit queue size to prevent huge lag
@@ -42,6 +40,10 @@ class Radio():
 
         self.rx_lost_packages = 0 #counts number of packages thrown away due to full queue
         
+        self.tx_package_counter = 0 #counts number of transmitted packages
+        self.rx_package_counter = 0 #counts number of detected packages
+
+
         self.stop = False #tells the threads to stop
 
         #start threads for tx and rx, deamon tells the thread to kil if this thread dies
@@ -51,7 +53,9 @@ class Radio():
         self.tx_thread = threading.Thread(target=self.tx, daemon=True)
         self.recive_chain_thread.start()
         self.rx_thread.start()
-        self.tx_thread.start() 
+        self.tx_thread.start()
+
+        self.preamble = PREAMBLE()
     
     def enable_fft_plot(self):
         # We don't start a thread here anymore!
@@ -86,17 +90,16 @@ class Radio():
 
     def recive_chain(self):
         print("Radio: starts recive chain thread")
-        new_package = self.get_rx_package()
+        new_package = rx_filter(self.get_rx_package())
         
         while not self.stop:
-            old_package = new_package
-            new_package = self.get_rx_package()
-            
-            if preamble_detector(old_package, new_package) != None:
-                #print("package detected")
-                None
+            new_package = rx_filter(self.get_rx_package())
+            peaks = self.preamble.detector(new_package) 
+            if len(peaks) > 0:
+                self.rx_package_counter += 1
             try:
                 self._fft_queue.put_nowait(new_package)
+                None
             except:
                 continue
         print("Radio: stops recive chain thread")
@@ -105,8 +108,9 @@ class Radio():
         return self.__rx_queue.get()
 
     def send_tx_package(self, data):
-        package = tx_filter(modulator(add_preamble_to_data(data)))
+        package = tx_filter(modulator(self.preamble.add_preamble(data)))
         self.__tx_queue.put(package)
+        self.tx_package_counter += 1
 
     #recives data from adam pluto and stores in rx_queu
     def rx(self):
@@ -140,6 +144,9 @@ class Radio():
         self.tx_thread.join() #waits untill the threads are finished
         self.rx_thread.join()
         self.recive_chain_thread.join()
+
+        print("Radio: transmitted packages {}, recived packages {}".format(self.tx_package_counter, self.rx_package_counter))
+
         del self._sdr
     
     def __del__(self):
@@ -151,16 +158,22 @@ class Radio():
 if __name__ == "__main__":
     print("started program")
     radio = Radio()
-    radio.enable_fft_plot()
-    data = np.random.randint(0,2,10024)
-    stop = False
+    #radio.enable_fft_plot()
+    #radio.preamble.enable_correlation_plot()
 
+    package_size = int(read_config_parameter("general", "package_size"))
+    data = np.random.randint(0,2,package_size)
 
     try:
         while True:
-            for i in range(10):
+            #print("sending data")
+            if radio.preamble.calibrated == True: #no point in sending before calibration is finished
                 radio.send_tx_package(data)
-                plt.pause(0.1)
+                print(f"\r transmitted packages {radio.tx_package_counter}, recived packages {radio.rx_package_counter}", end="")
+            plt.pause(1)
+            
+            #time.sleep(1)
+            #print("sending data")
     except KeyboardInterrupt:
         radio.stop_radio()
         del radio
