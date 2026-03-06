@@ -19,18 +19,25 @@ class Radio():
         self.sample_rate = self.symboles_per_second*self.sps_rx
         
         self._sdr.sample_rate = self.sample_rate
-        self._sdr.rx_lo                       = int(float(read_config_parameter("adalm_pluto", "center_freq")))
+        print(self._sdr.sample_rate)
         self._sdr.tx_lo                       = int(float(read_config_parameter("adalm_pluto", "center_freq")))
+        print(self._sdr.tx_lo)
+        self._sdr.tx_hardwaregain_chan0       = int(read_config_parameter("adalm_pluto", "tx_gain"))
+        print(self._sdr.tx_hardwaregain_chan0)
+
+
+        self._sdr.gain_control_mode_chan0     = "manual"
+        self._sdr.rx_lo                       = int(float(read_config_parameter("adalm_pluto", "center_freq")))
         self._sdr.rx_rf_bandwidth             = int(self._sdr.sample_rate*0.8) #antialiasing
         self._sdr.rx_buffer_size              = int(float(read_config_parameter("adalm_pluto", "rx_buffer_size")))
-        self._sdr.gain_control_mode_chan0 = "manual"
         self._sdr.rx_hardwaregain_chan0       = int(read_config_parameter("adalm_pluto", "rx_gain"))
-        self._sdr.tx_hardwaregain_chan0       = int(read_config_parameter("adalm_pluto", "tx_gain"))
+        
 
         
         self.__rx_queue = queue.Queue(maxsize=10) # Limit queue size to prevent huge lag
         self.__tx_queue = queue.Queue(maxsize=10) # Limit queue size to prevent huge lag
 
+        self._fft_queue = queue.Queue(maxsize=1) # Limit queue size to prevent huge lag
 
 
         self.rx_lost_packages = 0 #counts number of packages thrown away due to full queue
@@ -45,15 +52,53 @@ class Radio():
         self.recive_chain_thread.start()
         self.rx_thread.start()
         self.tx_thread.start() 
+    
+    def enable_fft_plot(self):
+        # We don't start a thread here anymore!
+        # Instead, we set up the figure and the animation.
+        self.fft_fig, self.ax = plt.subplots()
+        self.fft_line, = self.ax.plot([], [])
+        self.ax.set_ylim(0, 100) # Adjust based on your signal levels
+        self.ax.set_xlim(-1, 1)
 
+        from matplotlib.animation import FuncAnimation
+        # interval=100 means the plot updates 10 times per second
+        self.ani = FuncAnimation(self.fft_fig, self._update_fft, interval=1, cache_frame_data=False)
+        plt.show(block=False) # block=False lets the script continue
+
+    def _update_fft(self, frame):
+        try:
+            # Check the queue for new SDR data
+            data = self._fft_queue.get_nowait()
+            fft = np.fft.fftshift(np.fft.fft(data))
+            mag = 20*np.log10(np.abs(fft))
+            
+            x = np.linspace(-1, 1, len(mag))
+            self.fft_line.set_data(x, mag)
+            
+            
+            # Optional: Dynamic scaling
+            # self.ax.set_ylim(0, np.max(mag) * 1.2)
+            
+            return self.fft_line,
+        except queue.Empty:
+            return self.fft_line
 
     def recive_chain(self):
         print("Radio: starts recive chain thread")
         new_package = self.get_rx_package()
+        
         while not self.stop:
             old_package = new_package
             new_package = self.get_rx_package()
-            preamble_detector(np.concatenate)
+            
+            if preamble_detector(old_package, new_package) != None:
+                #print("package detected")
+                None
+            try:
+                self._fft_queue.put_nowait(new_package)
+            except:
+                continue
         print("Radio: stops recive chain thread")
 
     def get_rx_package(self):
@@ -83,7 +128,7 @@ class Radio():
         while not self.stop:
             try:
                 tx_data = self.__tx_queue.get(timeout=0.5) #timeout in seconds
-                self._sdr.tx(tx_data)
+                self._sdr.tx(tx_data*(2**14))
             except queue.Empty:
                 continue
         print("Radio: stops tx thread")
@@ -106,15 +151,20 @@ class Radio():
 if __name__ == "__main__":
     print("started program")
     radio = Radio()
-    
-    data = np.random.randint(0,2,250)
+    radio.enable_fft_plot()
+    data = np.random.randint(0,2,10024)
     stop = False
-    for i in range(10):
-        radio.send_tx_package(data)
 
-    radio.stop_radio()
-    del radio
-    print("stoped program")
+
+    try:
+        while True:
+            for i in range(10):
+                radio.send_tx_package(data)
+                plt.pause(0.1)
+    except KeyboardInterrupt:
+        radio.stop_radio()
+        del radio
+        print("stoped program")
 
 
 

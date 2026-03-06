@@ -18,7 +18,8 @@ reference_signal = rx_filter(sp.signal.resample_poly(tx_filter(modulated_preambl
 peak_to_start_of_signal = -np.size(reference_signal)+1 + sps_rx*span #don't ask, i do not know why it is not sps_rx*span/2
 
 #takes in the data after rx_filter and removes all data before preamble or None if no data was detected
-def preamble_detector(data):
+def preamble_detector(olddata, newdata):
+    data = np.concatenate((olddata, newdata[0:peak_to_start_of_signal])) #ensures that it handles preambles in between packages
     normalization_constant = np.sqrt(np.sum(np.abs(data)**2) * np.sum(np.abs(reference_signal)**2))
     norm_cross_cor = np.abs(sp.signal.correlate(data, reference_signal, mode="full") / normalization_constant)
     peak_correlation = np.argmax(norm_cross_cor) #peak in cross correlation
