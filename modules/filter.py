@@ -2,7 +2,7 @@
 import numpy as np
 import math
 import matplotlib.pyplot as plt
-from scipy.signal import upfirdn, butter, sosfilt, sosfreqz
+from scipy.signal import upfirdn, butter, lfilter, lfilter_zi, freqz
 from config import read_config_parameter
 
 
@@ -24,7 +24,7 @@ class FILTERS():
         rx_span= float(read_config_parameter("filter", "span"))
         rx_sps = int(read_config_parameter("filter", "sps_rx"))
         t, self.rx_filter_taps, h_f = self.get_RRcos_filter_taps(rx_beta, rx_span, rx_sps)
-
+        self.rx_filter_state = lfilter_zi(self.rx_filter_taps, [1.0]) #initial state of filter
 
         rx_recive_freq = float(read_config_parameter("adalm_pluto", "rx_recive_freq"))
         rx_lo_freq = float(read_config_parameter("adalm_pluto", "rx_lo_freq"))
@@ -36,8 +36,11 @@ class FILTERS():
         low_freq = center_f - max_freq_offset_ppm*(1e-6)*rx_lo_freq*3
         high_freq = center_f + max_freq_offset_ppm*(1e-6)*rx_lo_freq*3 #two times is the worst case of both adam pluto and 4 times gives margine
         print("Butterwort freq range {}, {}".format(low_freq, high_freq))
-        self.butterwort_sos = butter(N=4, Wn=[low_freq, high_freq], btype="bandpass", output="sos", fs=self.fs)
+        self.bandpass_b_coeff, self.bandpass_a_coeff = butter(N=4, Wn=[low_freq, high_freq], btype="bandpass", output="ba", fs=self.fs)
+        self.bandpass_state = lfilter_zi(self.bandpass_b_coeff, self.bandpass_a_coeff) #initial state of filter
         
+
+
     
     def generate_filter_file(self, taps, tx_gain, rx_gain, interpolation_rate, demodulation_rate, tx_bandwidth, rx_bandwidth, path):
         #making header
@@ -83,13 +86,14 @@ class FILTERS():
                     down = 1)
 
     def rx_filter(self, data):
-        return upfirdn(h = self.rx_filter_taps,
-                    x = data,
-                    up = 1,
-                    down = 1)
+        #the memory handle is for ensuring that the filter can work on continous data which is packed into packages, essentialy combining the results from the previous and new datapackage
+        filtdata, self.rx_filter_state = lfilter(self.rx_filter_taps, [1.0], data, zi=self.rx_filter_state)
+        return filtdata
     
     def rx_bandpass_filter(self, data):
-        return sosfilt(self.butterwort_sos, data)
+        #the memory handle is for ensuring that the filter can work on continous data which is packed into packages, essentialy combining the results from the previous and new datapackage
+        filtdata, self.bandpass_state = lfilter(self.bandpass_b_coeff, self.bandpass_a_coeff, data, zi=self.bandpass_state)
+        return filtdata
 
     def plot_filter(self):
         beta = float(read_config_parameter("filter", "beta"))
@@ -129,10 +133,13 @@ if __name__ == "__main__":
     random_test_data = np.random.randint(0, 2, 1024)*2 - 1
     filters.tx_filter(random_test_data)
     filters.rx_filter(random_test_data)
+    print("RX filter: size incoming data {}, size outgoing data, {}".format(np.size(random_test_data), np.size(filters.rx_filter(random_test_data))))
+
+    print("Butterwort filter: size incoming data {}, size outgoing data, {}".format(np.size(random_test_data), np.size(filters.rx_bandpass_filter(random_test_data))))
 
     filters.plot_filter()
 
-    w, h = sosfreqz(filters.butterwort_sos, worN=8000, fs=filters.fs)
+    w, h = freqz(filters.bandpass_b_coeff, filters.bandpass_a_coeff, worN=8000, fs=filters.fs)
     plt.plot(w, 20 * np.log10(np.maximum(abs(h), 1e-5)))
     plt.title("Butterworth Filter Response")
     plt.xlabel('Frequency [Hz]')

@@ -101,8 +101,9 @@ class Radio():
             new_data = self.synchronization.course_freq_sync(new_data)
             new_data = self.filters.rx_filter(new_data)
             peaks = self.preamble.detector(data, new_data) 
-            if len(peaks) > 0:
+            for peak in peaks:
                 self.rx_package_counter += 1
+                
             try:
                 self._fft_queue.put_nowait(new_data)
                 None
