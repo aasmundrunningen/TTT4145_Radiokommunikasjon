@@ -37,9 +37,6 @@ class PREAMBLE():
         self.correlation_plot_queue = queue.Queue(maxsize=1) #Queue size of 1 to remove backlog
         self.ylim_plot = 0
 
-        
-
-
     def detector(self, data, new_data):
         conc_data = np.concatenate((data, new_data[:-self.peak_to_start_of_signal])) #ensures that it handles preambles in between packages
         #data_power = np.sqrt(np.sum(np.pow(np.abs(data), 2)) * np.sum(np.pow(np.abs(self.reference_signal),2)))

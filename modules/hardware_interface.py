@@ -20,7 +20,7 @@ class Radio():
         
         self._sdr.sample_rate = self.sample_rate
         print("Radio: sampling rate: {} MsPs".format(self.sample_rate/1e6))
-        self._sdr.tx_lo = int(float(read_config_parameter("adalm_pluto", "rx_recive_freq"))) #int(float(read_config_parameter("adalm_pluto", "tx_lo_freq")))
+        self._sdr.tx_lo = int(float(read_config_parameter("adalm_pluto", "tx_lo_freq"))) #int(float(read_config_parameter("adalm_pluto", "tx_lo_freq")))
         self._sdr.tx_hardwaregain_chan0       = int(read_config_parameter("adalm_pluto", "tx_gain"))
 
         self._sdr.gain_control_mode_chan0     = "manual"
@@ -54,11 +54,10 @@ class Radio():
         self.recive_chain_thread = threading.Thread(target=self.recive_chain, daemon=True)
         self.rx_thread = threading.Thread(target=self.rx, daemon=True)
         self.tx_thread = threading.Thread(target=self.tx, daemon=True)
-        self.recive_chain_thread.start()
-        self.rx_thread.start()
+        #self.recive_chain_thread.start()
+        #self.rx_thread.start()
         self.tx_thread.start()
-
-    
+  
     def enable_fft_plot(self):
         # We don't start a thread here anymore!
         # Instead, we set up the figure and the animation.
@@ -98,17 +97,20 @@ class Radio():
             data = new_data
             new_data = self.get_rx_package()
             new_data = self.filters.rx_bandpass_filter(new_data)
-            new_data = self.synchronization.course_freq_sync(new_data)
-            new_data = self.filters.rx_filter(new_data)
-            peaks = self.preamble.detector(data, new_data) 
-            for peak in peaks:
-                self.rx_package_counter += 1
-                
             try:
                 self._fft_queue.put_nowait(new_data)
                 None
             except:
                 continue
+
+            new_data = self.synchronization.course_freq_sync(new_data)
+            new_data = self.filters.rx_filter(new_data)
+            peaks = self.preamble.detector(data, new_data) 
+            for peak in peaks:
+                self.rx_package_counter += 1
+            
+
+
         print("Radio: stops recive chain thread")
 
     def get_rx_package(self):
@@ -149,8 +151,8 @@ class Radio():
         print("Radio: lost rx packages: {}".format(self.rx_lost_packages))
         self.stop = True
         self.tx_thread.join() #waits untill the threads are finished
-        self.rx_thread.join()
-        self.recive_chain_thread.join()
+        #self.rx_thread.join()
+        #self.recive_chain_thread.join()
 
         print("Radio: transmitted packages {}, recived packages {}".format(self.tx_package_counter, self.rx_package_counter))
 
@@ -173,7 +175,8 @@ if __name__ == "__main__":
 
     try:
         while True:
-            if radio.preamble.calibrated == True: #no point in sending before calibration is finished
+            
+            if True: #radio.preamble.calibrated == True: #no point in sending before calibration is finished
                 radio.send_tx_package(data)
                 print(f"\r transmitted packages {radio.tx_package_counter}, recived packages {radio.rx_package_counter}", end="")
             plt.pause(1)

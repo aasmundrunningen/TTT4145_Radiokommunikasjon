@@ -2,7 +2,7 @@
 import numpy as np
 import math
 import matplotlib.pyplot as plt
-from scipy.signal import upfirdn, butter, lfilter, lfilter_zi, freqz
+from scipy.signal import upfirdn, butter, lfilter, lfiltic, freqz
 from config import read_config_parameter
 
 
@@ -24,7 +24,7 @@ class FILTERS():
         rx_span= float(read_config_parameter("filter", "span"))
         rx_sps = int(read_config_parameter("filter", "sps_rx"))
         t, self.rx_filter_taps, h_f = self.get_RRcos_filter_taps(rx_beta, rx_span, rx_sps)
-        self.rx_filter_state = lfilter_zi(self.rx_filter_taps, [1.0]) #initial state of filter
+        self.rx_filter_state = lfiltic(b=self.rx_filter_taps, a=[1], y=0) #initial state of filter
 
         rx_recive_freq = float(read_config_parameter("adalm_pluto", "rx_recive_freq"))
         rx_lo_freq = float(read_config_parameter("adalm_pluto", "rx_lo_freq"))
@@ -37,11 +37,8 @@ class FILTERS():
         high_freq = center_f + max_freq_offset_ppm*(1e-6)*rx_lo_freq*3 #two times is the worst case of both adam pluto and 4 times gives margine
         print("Butterwort freq range {}, {}".format(low_freq, high_freq))
         self.bandpass_b_coeff, self.bandpass_a_coeff = butter(N=4, Wn=[low_freq, high_freq], btype="bandpass", output="ba", fs=self.fs)
-        self.bandpass_state = lfilter_zi(self.bandpass_b_coeff, self.bandpass_a_coeff) #initial state of filter
-        
-
-
-    
+        self.bandpass_state = lfiltic(b=self.bandpass_b_coeff, a=self.bandpass_a_coeff, y=0) #initial state of filter
+            
     def generate_filter_file(self, taps, tx_gain, rx_gain, interpolation_rate, demodulation_rate, tx_bandwidth, rx_bandwidth, path):
         #making header
         taps = np.int16(np.round(taps / np.sum(taps) * normalisation_sum_adam_pluto)) #normalisation of filter

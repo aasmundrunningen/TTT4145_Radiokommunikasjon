@@ -1,7 +1,17 @@
 import numpy as np
 from config import read_config_parameter
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from matplotlib.collections import LineCollection
 import scipy as sp
+from numba import njit
+import queue
+
+#for self test of the system
+import modulation
+import filter
+
+
 
 simulation = read_config_parameter("simulator", "simulation")
 
@@ -19,41 +29,6 @@ plot_sampling_error = int(read_config_parameter("downsampler", "plot_sampling_er
 package_size = int(read_config_parameter("general", "package_size"))
 downsampled_data = np.zeros(package_size, dtype=complex)
 downsampler_interpolation_rate = int(read_config_parameter("downsampler", "interpolation_rate"))
-
-def downsampler(data):
-    if data is None: #no data in package
-        return None
-
-    if simulation:
-        #parameters for simulation purpose
-        steps = []
-        times = []
-
-    integral = 0    
-    data_interp = np.interp(np.linspace(0, np.size(data), np.size(data)*downsampler_interpolation_rate), range(np.size(data)), data)
-    downsampled_data[0] = data_interp[0]
-    step = sps*downsampler_interpolation_rate
-    time = step #normalized to samplingtime, so 1 is one sample periode
-    for i in range(1, package_size): #goes trough the number of datapoints expected
-        y_mid  = data_interp[int(time - step/2)]
-        downsampled_data[i] = data_interp[int(time)]
-        
-        e = np.real(y_mid)*(np.real(downsampled_data[i])-np.real(downsampled_data[i-1])) #Gardner timing error detector algorithm
-        integral = integral + e
-        step = sps*downsampler_interpolation_rate - ki_downsampler*integral - kp_downsampler*e #pi controller for step movement
-        time = time + step
-        
-        steps.append(step)
-        times.append(int(time))
-
-        if plot_eye and i < 40:
-            plt.plot(data_interp[int(time - step/2):int(time+step/2)])
-    
-    if plot_eye:
-        plt.show()
-    plt.plot(steps)
-    plt.show()
-    return downsampled_data
 
 
 plot_error_freq_sync = int(read_config_parameter("freq_sync", "plot_error"))
@@ -83,44 +58,155 @@ def freq_sync(data):
     return data_out
 
 
-
-plot_course_freq_sync = int(read_config_parameter("course_freq_sync", "plot_freq_spectrum"))
-def course_freq_sync(data):
-    
-    psd = np.abs(np.fft.fftshift(np.fft.fft(np.pow(data,4)))) #to power of 4 to remove modulation for QPSK
-    f = np.linspace(-fs/2.0, fs/2.0, len(psd))
-    t = np.linspace(0, 1/fs * np.size(data), np.size(data))
-    max_freq = f[np.argmax(psd)]
-    data = data * np.exp(1j*2*np.pi*t*max_freq/4) #quarter of maxfreq due to squaring moving peak to 4*delta_f
-    
-    if plot_course_freq_sync:
-        psd_corrected = np.fft.fftshift(np.fft.fft(np.pow(data,4))) #squared bpsk removes the modulation, only carrier ramains. Need to be cubed for qpsk
-        plt.plot(f, np.abs(psd), label="Original PSD")
-        plt.plot(f, np.abs(psd_corrected), label="Adjusted PSD")
-        plt.xlabel("Frequency [Hz]")
-        plt.ylabel("|PSD|")
-        plt.legend()
-        #plt.vlines(max_freq, 0, )
-        plt.title("Power density spectrum of recived signal")
-        plt.show()
-    return data
-
-
 class SYNCHRONIZATION():
     def __init__(self):
         buffer_size = int(read_config_parameter("adalm_pluto", "rx_buffer_size"))
         symboles_per_second = float(read_config_parameter("general", "symboles_per_second"))
-        sps_rx = float(read_config_parameter("filter", "sps_rx"))
-        self.fs = symboles_per_second*sps_rx
+        self.sps_rx = int(read_config_parameter("filter", "sps_rx"))
+        self.fs = symboles_per_second*self.sps_rx
+        self.package_size = int(read_config_parameter("general", "package_size"))
 
         self.f_for_course_freq_sync = np.fft.fftfreq(buffer_size, d=1/self.fs) #np.linspace(-self.fs/2.0, self.fs/2.0, buffer_size)
         self.t_for_course_freq_sync = np.linspace(0, 1/self.fs * buffer_size, buffer_size)
+
+        self.time_sync_ki = float(read_config_parameter("downsampler", "ki_symbolsync"))
+        self.time_sync_kp = float(read_config_parameter("downsampler", "kp_symbolsync"))
+        self.time_sync_sampling_steps_queue = queue.Queue(maxsize=1) #Used for plotting eye diagram
+        self.time_sync_data_queue = queue.Queue(maxsize=1) ##Used for plotting eye diagram
+        self.time_sync_outdata_queue = queue.Queue(maxsize=1) ##Used for plotting eye diagram
+
 
     def course_freq_sync(self, data):
         psd = np.abs(np.fft.fft(np.pow(data,4))) #to power of 4 to remove modulation for QPSK
         max_freq = self.f_for_course_freq_sync[np.argmax(psd)]
         data = data * np.exp(1j*2*np.pi*self.t_for_course_freq_sync*max_freq/2) #quarter of maxfreq due to squaring moving peak to 4*delta_f
         return data
+    
+
+
+    #@njit #precompiles this section to not have the for loop overhead
+    def timing_sync(self, data):
+        outdata_real = np.zeros(self.package_size)
+        outdata_imag = np.zeros(self.package_size)
+        outdata = np.zeros(self.package_size, dtype=complex)
+        outdata[0] = data[0]
+        step = self.sps_rx
+        steps = np.zeros_like(outdata_real) #for plotting
+        time = step
+        data_times = range(len(data))
+        integral = 0
+        real_data = np.real(data)
+        imag_data = np.imag(data)
+        for i in range(1, self.package_size):
+            [outdata_real[i], y_mid_real] = np.interp([time, time - step/2], data_times, real_data)
+            [outdata_imag[i], y_mid_imag] = np.interp([time, time - step/2], data_times, imag_data)
+            e = y_mid_real*(outdata_real[i] - outdata_real[i-1]) + y_mid_imag*(outdata_imag[i] - outdata_imag[i-1])
+            integral += e
+            step -= self.time_sync_kp*e + self.time_sync_ki*integral
+            steps[i] = step
+            time += step
+        
+        outdata = outdata_real + 1j*outdata_imag
+
+        try:
+            self.time_sync_sampling_steps_queue.put_nowait(steps)
+            self.time_sync_data_queue.put_nowait(data)
+            self.time_sync_outdata_queue.put_nowait(outdata)
+        except: 
+            pass
+
+        return outdata
+
+    def enable_eye_plot(self):
+        self.eye_fig, [self.ax1, self.ax2, self.ax3] = plt.subplots(1,3)
+        self.eye_line, = self.ax1.plot([], [])
+        self.ax1.set_ylim(-2, 2) # Adjust based on your signal levels
+        self.ax1.set_xlim(-self.sps_rx/2, self.sps_rx/2)
+
+        self.eye_segments = LineCollection([], linewidths=0.5, alpha=0.5)
+        self.ax1.add_collection(self.eye_segments)
+
+        self.steps_line, = self.ax2.plot([], [])
+        self.ax2.set_ylim(self.sps_rx*0.5, self.sps_rx*2) # Adjust based on your signal levels
+        self.ax2.set_xlim(0, self.package_size)
+
+        self.power_line, = self.ax3.plot([], [])
+        self.ax3.set_ylim(0, 1) # Adjust based on your signal levels
+        self.ax3.set_xlim(0, self.package_size)
+
+
+
+
+        self.ani = FuncAnimation(self.eye_fig, self.update_eye_diagram, interval=1, cache_frame_data=False)
+        plt.show(block=False) # block=False lets the script continue
+
+    def update_eye_diagram(self, frame):
+        try:
+            # Check the queue for new SDR data
+            N = 10
+            data = self.time_sync_data_queue.get_nowait()
+            data_times = range(len(data))
+            steps = self.time_sync_sampling_steps_queue.get_nowait()
+            outdata = self.time_sync_outdata_queue.get_nowait()
+            interp_data = []
+            time = self.sps_rx
+            x = np.linspace(-self.sps_rx/2, self.sps_rx/2, N)
+            for i, step in enumerate(steps):
+                y_segment = np.real(np.interp(np.linspace(time-step/2, time+step/2, N), data_times, data))
+                interp_data.append(np.column_stack([x, y_segment]))
+                time += step
+            
+            self.eye_segments.set_segments(interp_data)
+
+
+            
+            self.steps_line.set_data(range(len(steps)), steps)
+            self.ax2.set_xlim(0, len(steps))
+            self.power_line.set_data(range(len(outdata)), np.abs(outdata))
+            self.ax3.set_xlim(0, len(outdata))
+
+
+            return self.eye_segments, self.steps_line, self.power_line
+        
+
+            
+        except queue.Empty:
+            return self.eye_segments, self.steps_line, self.power_line
+
         
     
+if __name__ == "__main__":
+    filter = filter.FILTERS()
+
+    filter_remove = int(read_config_parameter("filter", "span"))*int(read_config_parameter("filter", "sps_rx"))
+
     
+    
+    plt.show()
+
+    sync = SYNCHRONIZATION()
+    
+    #indata = np.concatenate([np.zeros(50), indata, np.zeros(50)]) #zeropad to empty tx filter
+    
+    sync.enable_eye_plot()
+
+    try:
+        while plt.fignum_exists(sync.eye_fig.number):
+            package_size = int(read_config_parameter("general", "package_size"))
+            indata = np.random.randint(0, 2, package_size*2)
+            indata = modulation.modulator(indata)
+            indata = filter.tx_filter(indata)
+            indata = filter.rx_filter(indata)[filter_remove:-filter_remove] #removes start and end of filter    
+            time_offsett = 1
+            clock_speed_relation = 1.01 #fraction between recive and transmitt clock, 1 is equal clock speeds
+            time_jitter = 0 #std of timing jitter
+            sampling_times = np.linspace(time_offsett, time_offsett + clock_speed_relation*sync.sps_rx*package_size, package_size*sync.sps_rx) + np.random.normal(loc=0, scale=time_jitter, size = package_size*sync.sps_rx)
+            sampled_data = np.interp(sampling_times, range(len(indata)), indata)
+
+            time_synced_data = sync.timing_sync(sampled_data)
+            plt.pause(1)
+
+
+    except KeyboardInterrupt:
+        del filter
+        del sync
