@@ -101,7 +101,7 @@ class Radio():
                 self._fft_queue.put_nowait(new_data)
                 None
             except:
-                continue
+                pass
 
             new_data = self.synchronization.course_freq_sync(new_data)
             new_data = self.filters.rx_filter(new_data)
@@ -143,7 +143,7 @@ class Radio():
                 tx_data = self.__tx_queue.get(timeout=0.5) #timeout in seconds
                 self._sdr.tx(tx_data*(2**14))
             except queue.Empty:
-                continue
+                pass
         print("Radio: stops tx thread")
 
     def stop_radio(self):
