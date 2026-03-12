@@ -32,7 +32,7 @@ class FILTERS():
         symboles_per_second = float(read_config_parameter("general", "symboles_per_second"))
         sps_rx = float(read_config_parameter("filter", "sps_rx"))
         self.fs = symboles_per_second*sps_rx
-        center_f = rx_recive_freq - rx_lo_freq
+        center_f = np.abs(rx_recive_freq - rx_lo_freq)
         low_freq = center_f - max_freq_offset_ppm*(1e-6)*rx_lo_freq*3
         high_freq = center_f + max_freq_offset_ppm*(1e-6)*rx_lo_freq*3 #two times is the worst case of both adam pluto and 4 times gives margine
         print("Butterwort freq range {}, {}".format(low_freq, high_freq))
