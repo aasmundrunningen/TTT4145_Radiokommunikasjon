@@ -87,12 +87,5 @@ def filter(decoded):
 
 
 
-if __name__ == "__main__":
-    source_coder = SOURCE_CODER()
-    encoded_signal = source_coder.source_encoder(np.random.randint(-32768, 32767, (240, 1), dtype=np.int16))
-    decoded_signal = source_coder.source_decoder(encoded_signal)
-    filtered_signal = source_coder.filter(decoded_signal)   
-    print("encoded signal shape:", encoded_signal.shape)
-    print("decoded signal shape:", decoded_signal.shape)    
-    print("filtered signal shape:", filtered_signal.shape)
-    
+
+
