@@ -72,17 +72,17 @@ class SYNCHRONIZATION():
         self.time_sync_ki = float(read_config_parameter("downsampler", "ki_symbolsync"))
         self.time_sync_kp = float(read_config_parameter("downsampler", "kp_symbolsync"))
         self.time_sync_sampling_steps_queue = queue.Queue(maxsize=1) #Used for plotting eye diagram
+        self.time_sync_sampling_times_queue = queue.Queue(maxsize=1) #Used for plotting eye diagram
         self.time_sync_data_queue = queue.Queue(maxsize=1) ##Used for plotting eye diagram
         self.time_sync_outdata_queue = queue.Queue(maxsize=1) ##Used for plotting eye diagram
 
+        self.constalation_data_queue = queue.Queue(maxsize=1) ##Used for plotting constalation
 
     def course_freq_sync(self, data):
         psd = np.abs(np.fft.fft(np.pow(data,4))) #to power of 4 to remove modulation for QPSK
         max_freq = self.f_for_course_freq_sync[np.argmax(psd)]
         data = data * np.exp(1j*2*np.pi*self.t_for_course_freq_sync*max_freq/2) #quarter of maxfreq due to squaring moving peak to 4*delta_f
         return data
-    
-
 
     #@njit #precompiles this section to not have the for loop overhead
     def timing_sync_gardner(self, data):
@@ -93,6 +93,8 @@ class SYNCHRONIZATION():
         step = self.sps_rx
         steps = np.zeros_like(outdata_real) #for plotting
         time = step
+        times = np.zeros(self.package_size)
+        times[0] = time
         data_times = range(len(data))
         integral = 0
         real_data = np.real(data)
@@ -105,11 +107,13 @@ class SYNCHRONIZATION():
             step -= self.time_sync_kp*e + self.time_sync_ki*integral
             steps[i] = step
             time += step
+            times[i] = time
         
         outdata = outdata_real + 1j*outdata_imag
 
         try:
             self.time_sync_sampling_steps_queue.put_nowait(steps)
+            self.time_sync_sampling_times_queue.put_nowait(times)
             self.time_sync_data_queue.put_nowait(data)
             self.time_sync_outdata_queue.put_nowait(outdata)
         except: 
@@ -123,16 +127,16 @@ class SYNCHRONIZATION():
             power[i] = np.sum(np.abs(data[i:i+package_size:self.sps_rx]))
         
         i = np.argmax(power)
-        outdata = np.abs(data[i:i+package_size:self.sps_rx])
-
-        self.time_sync_sampling_steps_queue.put_nowait(np.zeros_like(outdata)+self.sps_rx)
-        self.time_sync_data_queue.put_nowait(data)
-        self.time_sync_outdata_queue.put_nowait(outdata)
-
+        outdata = data[i:i+package_size:self.sps_rx]
+        try:
+            self.time_sync_sampling_steps_queue.put_nowait(np.zeros(np.size(outdata))+self.sps_rx)
+            self.time_sync_sampling_times_queue.put_nowait(np.arange(np.size(outdata))*self.sps_rx + i)
+            self.time_sync_data_queue.put_nowait(data)
+            self.time_sync_outdata_queue.put_nowait(outdata)
+        except queue.Full:
+            pass
         return outdata
         
-
-
     def enable_eye_plot(self):
         self.eye_fig, [self.ax1, self.ax2, self.ax3] = plt.subplots(1,3)
         self.eye_line, = self.ax1.plot([], [])
@@ -161,16 +165,16 @@ class SYNCHRONIZATION():
             # Check the queue for new SDR data
             N = 10
             data = self.time_sync_data_queue.get_nowait()
-            data_times = range(len(data))
             steps = self.time_sync_sampling_steps_queue.get_nowait()
+            times = self.time_sync_sampling_times_queue.get_nowait()
             outdata = self.time_sync_outdata_queue.get_nowait()
+
+            data_times = range(len(data))
             interp_data = []
-            time = self.sps_rx
             x = np.linspace(-self.sps_rx/2, self.sps_rx/2, N)
             for i, step in enumerate(steps):
-                y_segment = np.real(np.interp(np.linspace(time-step/2, time+step/2, N), data_times, data))
+                y_segment = np.real(np.interp(np.linspace(times[i]-step/2, times[i]+step/2, N), data_times, data))
                 interp_data.append(np.column_stack([x, y_segment]))
-                time += step
             
             self.eye_segments.set_segments(interp_data)
 
@@ -189,7 +193,35 @@ class SYNCHRONIZATION():
         except queue.Empty:
             return self.eye_segments, self.steps_line, self.power_line
 
-        
+    def enable_constalation_plot(self):
+         # We don't start a thread here anymore!
+        # Instead, we set up the figure and the animation.
+        self.constalation_fig, self.ax = plt.subplots()
+        self.constalation_line, = self.ax.plot([], [], ".")
+        self.ax.set_ylim(-2,2) # Adjust based on your signal levels
+        self.ax.set_xlim(-2, 2)
+
+        from matplotlib.animation import FuncAnimation
+        # interval=100 means the plot updates 10 times per second
+        self.ani = FuncAnimation(self.constalation_fig, self.update_constalation_plot, interval=1, cache_frame_data=False)
+        plt.show(block=False) # block=False lets the script continue
+
+
+    def pass_data_to_constalation_plot(self, data):
+        try:
+                sync.constalation_data_queue.put_nowait(data)
+        except queue.Full:
+            pass
+
+    def update_constalation_plot(self, frame):
+        try:
+            data = self.constalation_data_queue.get_nowait()
+            self.constalation_line.set_data(np.real(data), np.imag(data))
+        except queue.Empty:
+            pass
+    
+        return self.constalation_line
+
     
 if __name__ == "__main__":
     filter = filter.FILTERS()
@@ -203,6 +235,7 @@ if __name__ == "__main__":
     #indata = np.concatenate([np.zeros(50), indata, np.zeros(50)]) #zeropad to empty tx filter
     
     sync.enable_eye_plot()
+    #sync.enable_constalation_plot()
 
     try:
         while plt.fignum_exists(sync.eye_fig.number):
@@ -211,14 +244,16 @@ if __name__ == "__main__":
             indata = modulation.modulator(indata)
             indata = filter.tx_filter(indata)
             indata = filter.rx_filter(indata)[filter_remove:-filter_remove] #removes start and end of filter    
+            
             time_offsett = 1
-            clock_speed_relation = 1.00 #fraction between recive and transmitt clock, 1 is equal clock speeds
+            clock_speed_relation = 1.01 #fraction between recive and transmitt clock, 1 is equal clock speeds
             time_jitter = 0 #std of timing jitter
             sampling_times = np.linspace(time_offsett, time_offsett + clock_speed_relation*sync.sps_rx*package_size, package_size*sync.sps_rx) + np.random.normal(loc=0, scale=time_jitter, size = package_size*sync.sps_rx)
             sampled_data = np.interp(sampling_times, range(len(indata)), indata)
-
+            
             time_synced_data = sync.timing_sync_power_selector(sampled_data)
-            plt.pause(1)
+            sync.pass_data_to_constalation_plot(time_synced_data)
+            plt.pause(1.5)
 
 
     except KeyboardInterrupt:
