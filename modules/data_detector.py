@@ -45,6 +45,7 @@ class PREAMBLE():
         
         treshold = self.correlation_treshold*noise_floor
         if self.calibration_counter < 10: #calibration of treshold going on
+            
             self.calibration_counter += 1
             if self.calibration_counter == 10:
                 self.calibrated = True
