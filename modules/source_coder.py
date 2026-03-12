@@ -3,40 +3,95 @@ import opuslib
 import scipy.signal as sig
 from config import read_config_parameter
 
+
+
+
+class SOURCE_CODER():
+    def __init__(self):
+        self.fs = read_config_parameter("source_coder", "fs")
+        self.channels = read_config_parameter("source_coder", "channels")
+        self.frame_ms = read_config_parameter("source_coder", "frame_ms")
+        self.frame_samples = read_config_parameter("source_coder", "frame_samples")
+        self.bitrate = read_config_parameter("source_coder", "bitrate")
+        self.block = read_config_parameter("source_coder", "block")
+
+        self.lowpass_filter = sig.butter(4, 0.45, btype='low', output='sos')
+        self.highpass_filter = sig.butter(4, 0.01, btype='high', output='sos')
+
+        self.enc = opuslib.Encoder(self.fs, self.channels, opuslib.APPLICATION_AUDIO)
+        self.enc.bitrate = self.bitrate  # 6 kbps
+        #enc.opus_encoder_ctl(enc, enc.OPUS_SET_VBR(1),enc.OPUS_SET_PACKET_LOSS_PERC(5))  # Disables VBR, for å få fast bitrate. Dette gjør at hver frame har samme størrelse, som gjør det enklere å håndtere på mottakersiden.
+    
+        self.dec = opuslib.Decoder(self.fs, self.channels)
+        
+    
+    def source_encoder(self, data):
+        x = data[:, 0]  #Dette er på formen (240,1). Samples x channel. Lagrer lyd, så det er en array med lengde 1024
+        # int16 til bytes 
+
+        x_bytes = x.tobytes()
+        try:
+            encoder = self.enc.encode(x_bytes, self.frame_samples) #Her endres den! 
+             # Sørger for fast lengde
+            expected_encoded_len = int(self.bitrate * self.frame_ms / 1000 / 8) 
+            # Gjør om til byte
+            encoder_bytes = bytearray(encoder)
+            #Legger på 0, om ikke nok bytes, eller kutter av om det er for mye. Dette gjør at vi alltid sender like mange bytes, som gjør det enklere å håndtere på mottakersiden.
+            if len(encoder_bytes) < expected_encoded_len:
+                encoder_bytes.extend([0] * (expected_encoded_len - len(encoder_bytes)))
+            else:
+                encoder_bytes = encoder_bytes[:expected_encoded_len]
+            #Gjør om til bits
+            opus_bits = np.unpackbits(np.frombuffer(encoder_bytes, dtype=np.uint8)) ###DETTO ER DATAEN VI SKAL SENDE
+            #Denne har 160 bits i lengde
+        except:
+            pass
+        return opus_bits
+    
+
+    def source_decoder(self, opus_bits):
+        try:
+            opus_bytes = np.packbits(opus_bits).tobytes()
+
+            # Decode tilbake til PCM16 bytes
+            decoder = self.dec.decode(opus_bytes, self.frame_samples)
+            decoded = np.frombuffer(decoder, dtype=np.int16).reshape(-1, 1)
+        except:
+            pass
+        return decoded
+    
+
+    def filter(self, decoded):
+        decoded = sig.sosfilt(self.lowpass_filter, decoded, axis=0)
+        decoded = sig.sosfilt(self.highpass_filter, decoded, axis=0)
+        return decoded
+    
 #-------------------------------------------------------
 #Konfigurering
 
 
-fs = read_config_parameter("source_coder", "fs")
-channels = read_config_parameter("source_coder", "channels")
-frame_ms = read_config_parameter("source_coder", "frame_ms")
-frame_samples = read_config_parameter("source_coder", "frame_samples")
-bitrate = read_config_parameter("source_coder", "bitrate")
-block = read_config_parameter("source_coder", "block")
 
 
 #-------------------------------------------------------
 #Lavpass og høypass filter for å fjerne støy fra sluttsignalet. 
 
-lowpass_filter = sig.butter(4, 0.45, btype='low', output='sos')
-highpass_filter = sig.butter(4, 0.01, btype='high', output='sos')
 
 #----------------------------------------------------------------------
 
 
 #Lager encoder
-enc = opuslib.Encoder(fs, channels, opuslib.APPLICATION_AUDIO)
-enc.bitrate = bitrate  # 6 kbps
+#enc = opuslib.Encoder(fs, channels, opuslib.APPLICATION_AUDIO)
+#enc.bitrate = bitrate  # 6 kbps
 #enc.opus_encoder_ctl(enc, enc.OPUS_SET_VBR(1),enc.OPUS_SET_PACKET_LOSS_PERC(5))  # Disables VBR, for å få fast bitrate. Dette gjør at hver frame har samme størrelse, som gjør det enklere å håndtere på mottakersiden.
 
 #--------------------------------------------------------
 
 #Lager decoder
-dec = opuslib.Decoder(fs, channels)
+#dec = opuslib.Decoder(fs, channels)
 
 
 #----------------------------------------------------------------------
-
+"""
 def source_encoder(data):
     x = data[:, 0]  #Dette er på formen (240,1). Samples x channel. Lagrer lyd, så det er en array med lengde 1024
     # int16 til bytes 
@@ -61,11 +116,11 @@ def source_encoder(data):
     #Denne har 160 bits i lengde
 
     return opus_bits
-
+"""
 
 #----------------------------------------------------------------------
 
-
+"""
 def source_decoder(opus_bits):
     opus_bytes = np.packbits(opus_bits).tobytes()
 
@@ -73,15 +128,16 @@ def source_decoder(opus_bits):
     decoder = dec.decode(opus_bytes, frame_samples)
     decoded = np.frombuffer(decoder, dtype=np.int16).reshape(-1, 1)
     return decoded
-
+"""
 
 #------------------------------------------------------------------------------
-
+"""
 def filter(decoded):
     decoded = sig.sosfilt(lowpass_filter, decoded, axis=0)
     decoded = sig.sosfilt(highpass_filter, decoded, axis=0)
     return decoded
 
+"""
 
 
 
