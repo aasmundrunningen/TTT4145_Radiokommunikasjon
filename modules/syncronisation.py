@@ -209,7 +209,7 @@ class SYNCHRONIZATION():
 
     def pass_data_to_constalation_plot(self, data):
         try:
-                sync.constalation_data_queue.put_nowait(data)
+                self.constalation_data_queue.put_nowait(data)
         except queue.Full:
             pass
 

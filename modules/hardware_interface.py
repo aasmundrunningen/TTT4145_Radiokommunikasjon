@@ -17,7 +17,9 @@ class Radio():
         self.symboles_per_second = int(read_config_parameter("general", "symboles_per_second"))
         self.sps_rx = int(read_config_parameter("filter", "sps_rx"))
         self.sample_rate = self.symboles_per_second*self.sps_rx
-        
+        self.package_size = int(read_config_parameter("general", "package_size"))
+
+
         self._sdr.sample_rate = self.sample_rate
         print("Radio: sampling rate: {} MsPs".format(self.sample_rate/1e6))
         self._sdr.tx_lo = int(float(read_config_parameter("adalm_pluto", "tx_lo_freq"))) #int(float(read_config_parameter("adalm_pluto", "tx_lo_freq")))
@@ -54,8 +56,8 @@ class Radio():
         self.recive_chain_thread = threading.Thread(target=self.recive_chain, daemon=True)
         self.rx_thread = threading.Thread(target=self.rx, daemon=True)
         self.tx_thread = threading.Thread(target=self.tx, daemon=True)
-        #self.recive_chain_thread.start()
-        #self.rx_thread.start()
+        self.recive_chain_thread.start()
+        self.rx_thread.start()
         self.tx_thread.start()
   
     def enable_fft_plot(self):
@@ -108,6 +110,10 @@ class Radio():
             peaks = self.preamble.detector(data, new_data) 
             for peak in peaks:
                 self.rx_package_counter += 1
+                data_package = np.concatenate([data, new_data])[peak:peak + (self.package_size+1)*self.sps_rx] #essentialy add one data length to lett it adjust the spacing
+                downsampled_data = self.synchronization.timing_sync_power_selector(data_package)
+                self.synchronization.pass_data_to_constalation_plot(downsampled_data)
+
             
 
 
@@ -151,8 +157,8 @@ class Radio():
         print("Radio: lost rx packages: {}".format(self.rx_lost_packages))
         self.stop = True
         self.tx_thread.join() #waits untill the threads are finished
-        #self.rx_thread.join()
-        #self.recive_chain_thread.join()
+        self.rx_thread.join()
+        self.recive_chain_thread.join()
 
         print("Radio: transmitted packages {}, recived packages {}".format(self.tx_package_counter, self.rx_package_counter))
 
@@ -169,6 +175,8 @@ if __name__ == "__main__":
     radio = Radio()
     #radio.enable_fft_plot()
     #radio.preamble.enable_correlation_plot()
+    radio.synchronization.enable_eye_plot()
+    #radio.synchronization.enable_constalation_plot()
 
     package_size = int(read_config_parameter("general", "package_size"))
     data = np.random.randint(0,2,package_size)
@@ -176,7 +184,7 @@ if __name__ == "__main__":
     try:
         while True:
             
-            if True: #radio.preamble.calibrated == True: #no point in sending before calibration is finished
+            if radio.preamble.calibrated == True: #no point in sending before calibration is finished
                 radio.send_tx_package(data)
                 print(f"\r transmitted packages {radio.tx_package_counter}, recived packages {radio.rx_package_counter}", end="")
             plt.pause(1)
