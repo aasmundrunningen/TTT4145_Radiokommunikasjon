@@ -8,13 +8,6 @@ from config import read_config_parameter
 
 class FILTERS():
     def __init__(self):
-        path = read_config_parameter("filter", "path")
-
-        #from https://github.com/analogdevicesinc/education_tools/blob/master/pluto/python/power_supply_noise_sniffer/libiio-power_supply_noise_sniffer/LTE20_MHz.ftr
-        #The taps for TX and taps for RX sums up to 84664 so this is probably the scaling of the filter
-        normalisation_sum_adam_pluto = 84664 
-
-
         tx_beta= float(read_config_parameter("filter", "beta"))
         tx_span= float(read_config_parameter("filter", "span"))
         self.tx_sps = int(read_config_parameter("filter", "sps_tx"))
@@ -31,24 +24,30 @@ class FILTERS():
         max_freq_offset_ppm = float(read_config_parameter("adalm_pluto", "max_freq_offset_ppm"))
         symboles_per_second = float(read_config_parameter("general", "symboles_per_second"))
         sps_rx = float(read_config_parameter("filter", "sps_rx"))
+        
         self.fs = symboles_per_second*sps_rx
-        center_f = rx_recive_freq - rx_lo_freq
-        low_freq = center_f - max_freq_offset_ppm*(1e-6)*rx_lo_freq*3
-        high_freq = center_f + max_freq_offset_ppm*(1e-6)*rx_lo_freq*3 #two times is the worst case of both adam pluto and 4 times gives margine
-        print("Butterwort freq range {}, {}".format(low_freq, high_freq))
-        self.bandpass_b_coeff, self.bandpass_a_coeff = butter(N=4, Wn=[low_freq, high_freq], btype="bandpass", output="ba", fs=self.fs)
+
+        signal_bandwidth = (1+rx_beta)*symboles_per_second/2 #one sided bandwidth out of RRC filter
+        input_bandwidth = signal_bandwidth + rx_lo_freq*2*max_freq_offset_ppm*1e-6 #one sided input bandwidth
+        butterwort_low_freq = rx_recive_freq - rx_lo_freq - input_bandwidth
+        nyquist_freq = symboles_per_second*sps_rx/2
+        if butterwort_low_freq + input_bandwidth > nyquist_freq:
+            print("FILTERS: signal goes outside nyquist limit")
+        if butterwort_low_freq < 0:
+            print("Filters: low frequency of butterwort less than zero!")
+        
+        self.bandpass_b_coeff, self.bandpass_a_coeff = butter(N=4, Wn=butterwort_low_freq, btype="highpass", output="ba", fs=self.fs)
         self.bandpass_state = lfiltic(b=self.bandpass_b_coeff, a=self.bandpass_a_coeff, y=0) #initial state of filter
-            
-    def generate_filter_file(self, taps, tx_gain, rx_gain, interpolation_rate, demodulation_rate, tx_bandwidth, rx_bandwidth, path):
-        #making header
-        taps = np.int16(np.round(taps / np.sum(taps) * normalisation_sum_adam_pluto)) #normalisation of filter
-        with open(path, "w") as file:
-            file.write("TX 3 GAIN {} INT {} #header for TX\n".format(tx_gain,interpolation_rate))
-            file.write("RX 3 GAIN {} DEC {} #header for TX\n".format(rx_gain,demodulation_rate))
-            file.write("BWTX {}\n".format(tx_bandwidth))
-            file.write("BWRX {}\n".format(rx_bandwidth))
-            for tap in taps:
-                file.write("{}, {}\n".format(tap, tap))
+
+        if __name__ == "__main__":
+            print(f"Bandwidth of system: {(rx_recive_freq-input_bandwidth)*1e-6:.2f}-{(rx_recive_freq+input_bandwidth)*1e-6:.2f} MHz")
+            print(f"Recive frequency: {rx_recive_freq*1e-6:.2f}MHz")
+            print(f"Recive LO: {rx_lo_freq*1e-6:.2f}MHz")
+            print("Bandwidth of RRC filter {:.2f} KHz".format(signal_bandwidth*1e-3))
+            print(f"Nyquist frequency: {nyquist_freq*1e-6:.2f}MHz")
+            print(f"Nyquist frequency limit: {(rx_lo_freq - nyquist_freq)*1e-6:.2f}-{(rx_lo_freq + nyquist_freq)*1e-6:.2f} MHz")
+
+
 
     #beta = roll_off_factor
     #span = filter length in symbols
@@ -61,7 +60,6 @@ class FILTERS():
         
         T_s = 1
 
-        
         p = lambda t: 2*beta/(np.pi*np.sqrt(T_s)) * (np.cos((1+beta)*np.pi*t/T_s) + np.sin((1-beta)*np.pi*t/T_s)/(4*beta*t/T_s)) / (1-(4*beta*t/T_s)**2)
         def p_zero_denominator(t):
             t_ = t + 1e-10
@@ -74,7 +72,6 @@ class FILTERS():
 
         h_f = np.fft.fftshift(np.fft.fft(h_t))
         return t, h_t, h_f
-
 
     def tx_filter(self, data):
         return upfirdn(h = self.tx_filter_taps,
@@ -130,16 +127,15 @@ if __name__ == "__main__":
     random_test_data = np.random.randint(0, 2, 1024)*2 - 1
     filters.tx_filter(random_test_data)
     filters.rx_filter(random_test_data)
-    print("RX filter: size incoming data {}, size outgoing data, {}".format(np.size(random_test_data), np.size(filters.rx_filter(random_test_data))))
-
-    print("Butterwort filter: size incoming data {}, size outgoing data, {}".format(np.size(random_test_data), np.size(filters.rx_bandpass_filter(random_test_data))))
 
     filters.plot_filter()
 
     w, h = freqz(filters.bandpass_b_coeff, filters.bandpass_a_coeff, worN=8000, fs=filters.fs)
+    w += float(read_config_parameter("adalm_pluto", "rx_lo_freq"))
+    w *= 1e-6
     plt.plot(w, 20 * np.log10(np.maximum(abs(h), 1e-5)))
     plt.title("Butterworth Filter Response")
-    plt.xlabel('Frequency [Hz]')
+    plt.xlabel('Frequency [MHz]')
     plt.ylabel('Amplitude [dB]')
     plt.grid(True)
     plt.show()

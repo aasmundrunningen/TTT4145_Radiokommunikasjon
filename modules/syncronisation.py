@@ -85,7 +85,7 @@ class SYNCHRONIZATION():
 
 
     #@njit #precompiles this section to not have the for loop overhead
-    def timing_sync(self, data):
+    def timing_sync_gardner(self, data):
         outdata_real = np.zeros(self.package_size)
         outdata_imag = np.zeros(self.package_size)
         outdata = np.zeros(self.package_size, dtype=complex)
@@ -116,6 +116,22 @@ class SYNCHRONIZATION():
             pass
 
         return outdata
+
+    def timing_sync_power_selector(self, data):
+        power = np.zeros(self.sps_rx)
+        for i in range(self.sps_rx):
+            power[i] = np.sum(np.abs(data[i:i+package_size:self.sps_rx]))
+        
+        i = np.argmax(power)
+        outdata = np.abs(data[i:i+package_size:self.sps_rx])
+
+        self.time_sync_sampling_steps_queue.put_nowait(np.zeros_like(outdata)+self.sps_rx)
+        self.time_sync_data_queue.put_nowait(data)
+        self.time_sync_outdata_queue.put_nowait(outdata)
+
+        return outdata
+        
+
 
     def enable_eye_plot(self):
         self.eye_fig, [self.ax1, self.ax2, self.ax3] = plt.subplots(1,3)
@@ -179,8 +195,6 @@ if __name__ == "__main__":
     filter = filter.FILTERS()
 
     filter_remove = int(read_config_parameter("filter", "span"))*int(read_config_parameter("filter", "sps_rx"))
-
-    
     
     plt.show()
 
@@ -198,12 +212,12 @@ if __name__ == "__main__":
             indata = filter.tx_filter(indata)
             indata = filter.rx_filter(indata)[filter_remove:-filter_remove] #removes start and end of filter    
             time_offsett = 1
-            clock_speed_relation = 1.01 #fraction between recive and transmitt clock, 1 is equal clock speeds
+            clock_speed_relation = 1.00 #fraction between recive and transmitt clock, 1 is equal clock speeds
             time_jitter = 0 #std of timing jitter
             sampling_times = np.linspace(time_offsett, time_offsett + clock_speed_relation*sync.sps_rx*package_size, package_size*sync.sps_rx) + np.random.normal(loc=0, scale=time_jitter, size = package_size*sync.sps_rx)
             sampled_data = np.interp(sampling_times, range(len(indata)), indata)
 
-            time_synced_data = sync.timing_sync(sampled_data)
+            time_synced_data = sync.timing_sync_power_selector(sampled_data)
             plt.pause(1)
 
 
