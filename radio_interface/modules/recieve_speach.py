@@ -4,7 +4,7 @@ os.environ["SD_ENABLE_ASIO"] = "1"   #Dette må skrives før en importerer sound
 import queue #Brukes til å lage en FIFO, first in first out kø
 import sounddevice as sd #Bruker for å ta imot lyd fra mikrofon og spille av. 
 import adi
-from config import read_config_parameter
+from radio_interface.config import read_config_parameter
 from source_coder import source_decoder, filter
 
 

@@ -1,5 +1,5 @@
 import adi
-from config import read_config_parameter
+from radio_interface.config import read_config_parameter
 import threading
 import multiprocessing
 import queue

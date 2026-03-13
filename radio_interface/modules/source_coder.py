@@ -1,7 +1,7 @@
 import numpy as np
 import opuslib
 import scipy.signal as sig
-from config import read_config_parameter
+from radio_interface.config import read_config_parameter
 
 
 class SOURCE_CODER():

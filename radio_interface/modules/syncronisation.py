@@ -1,5 +1,5 @@
 import numpy as np
-from config import read_config_parameter
+from radio_interface.config import read_config_parameter
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.collections import LineCollection

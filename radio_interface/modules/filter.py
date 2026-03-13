@@ -3,7 +3,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from scipy.signal import upfirdn, butter, lfilter, lfiltic, freqz
-from config import read_config_parameter
+from radio_interface.config import read_config_parameter
 
 
 class FILTERS():

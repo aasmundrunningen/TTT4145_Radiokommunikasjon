@@ -1,6 +1,6 @@
 
 import scipy as sp
-from config import read_config_parameter
+from radio_interface.config import read_config_parameter
 from modulation import modulator
 from filter import FILTERS
 import numpy as np

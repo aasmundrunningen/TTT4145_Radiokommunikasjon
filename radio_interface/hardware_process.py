@@ -114,10 +114,6 @@ class HARDWARE_COMMUNICATION():
 
     def stop(self):
         self.stop_event.set()
-        while not self.rx_q.empty():
-            self.rx_q.get()
-        while not self.rx_plot_q.empty():
-            self.rx_plot_q.get()
         self.hardware_process.join()
     
     def __del__(self):
