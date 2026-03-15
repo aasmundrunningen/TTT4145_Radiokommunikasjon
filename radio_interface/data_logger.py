@@ -28,7 +28,7 @@ def retrieve_data(filename):
     
 #run main to log data
 if __name__ == "__main__":
-    path = "data_logs/recived_data_1503_02.npz"
+    path = "radio_interface/data_logs/recived_data_1503_01.npz"
     print("Starting hardware process")
     hardware_process1 = HARDWARE_COMMUNICATION(ip="ip:192.168.3.1")
     hardware_process2 = HARDWARE_COMMUNICATION(ip="ip:192.168.2.1")

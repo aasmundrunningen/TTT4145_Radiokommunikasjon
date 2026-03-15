@@ -52,7 +52,7 @@ def hardware_communication_loop(ip, rx_q, tx_q, rx_plot_q, stop_event):
         if time.perf_counter() - last_timestamp > time_requirment:
             to_slow_loop_counter += 1
 
-        rx_data = sdr.rx()
+        rx_data = sdr.rx()/2048 #makes it normalized to +-1
         last_timestamp = time.perf_counter()
 
         try:

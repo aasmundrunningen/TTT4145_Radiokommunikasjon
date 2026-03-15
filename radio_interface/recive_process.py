@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 #for threading and multiprocessing
 import multiprocessing
@@ -50,11 +51,12 @@ class RECIVE_PROCESS:
             self.stop()
 
 if __name__ == "__main__":
-    data = data_logger.retrieve_data("data_logs/recived_data_1503_01.npz")
-    print(data[0].shape)
+    fig, ax = plt.subplots(4)
 
-    plt.plot(data[0])
-    plt.show()
+
+    data = data_logger.retrieve_data("data_logs/recived_data_1503_01.npz")
+    for recive_data in data:
+        
 
     """rx_q = multiprocessing.Queue(maxsize=10)
     recive_process = RECIVE_PROCESS(rx_q)
