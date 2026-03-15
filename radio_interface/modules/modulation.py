@@ -1,8 +1,8 @@
 import numpy as np
 from enum import Enum
-from radio_interface.config import read_config_parameter
+from . import config
 
-modulation_scheme = str(read_config_parameter("general", "modulation_scheme"))
+modulation_scheme = config.general.modulation_scheme
 
 def modulator(binary_data):
     if modulation_scheme == "BPSK":

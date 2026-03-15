@@ -1,11 +1,12 @@
 import multiprocessing
 import numpy as np
-import config
+import modules.config as config
 import signal
 import queue
 from modules.filter import FILTERS
 from modules.modulation import modulator
 from modules.data_detector import PREAMBLE
+import matplotlib.pyplot as plt
 
 
 def transmitt_process_loop(binary_q, tx_q, stop_event):
@@ -53,5 +54,9 @@ if __name__ == "__main__":
     binary_data = np.random.randint(0,2,100)
     transmitt_process.binary_q.put(binary_data)
     print(f"binary data: {binary_data}")
-    print(f"tx data: {tx_q.get()}")
+    tx_data = tx_q.get()
+    print(f"tx data: {tx_data}")
+    plt.plot(tx_data)
+    plt.title("Transmitt data")
+    plt.show()
     transmitt_process.stop()

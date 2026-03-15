@@ -1,5 +1,5 @@
 import numpy as np
-from radio_interface.config import read_config_parameter
+from . import config
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.collections import LineCollection
@@ -8,37 +8,37 @@ from numba import njit
 import queue
 
 #for self test of the system
-import modulation
-import filter
+from . import modulation
+from . import filter
 
 
 
-simulation = read_config_parameter("simulator", "simulation")
+simulation = config.simulator.simulation
 
-sps_rx = int(read_config_parameter("filter", "sps_rx"))
-symbolrate = int(read_config_parameter("general", "symboles_per_second"))
+sps_rx = config.filter.sps_rx
+symbolrate = config.general.symboles_per_second
 fs = symbolrate*sps_rx
 
 
 
-sps = int(read_config_parameter("filter", "sps_rx"))
-kp_downsampler = float(read_config_parameter("downsampler", "kp_symbolsync"))
-ki_downsampler = float(read_config_parameter("downsampler", "ki_symbolsync"))
-plot_eye = int(read_config_parameter("downsampler", "plot_eye"))
-plot_sampling_error = int(read_config_parameter("downsampler", "plot_sampling_error"))
-package_size = int(read_config_parameter("general", "package_size"))
+sps = config.filter.sps_rx
+kp_downsampler = config.downsampler.kp_symbolsync
+ki_downsampler = config.downsampler.ki_symbolsync
+plot_eye = config.downsampler.plot_eye
+plot_sampling_error = config.downsampler.plot_sampling_error
+package_size = config.general.package_size
 downsampled_data = np.zeros(package_size, dtype=complex)
-downsampler_interpolation_rate = int(read_config_parameter("downsampler", "interpolation_rate"))
+downsampler_interpolation_rate = config.downsampler.interpolation_rate
 
 
-plot_error_freq_sync = int(read_config_parameter("freq_sync", "plot_error"))
-kp_freq_sync = float(read_config_parameter("freq_sync", "kp"))
-ki_freq_sync = float(read_config_parameter("freq_sync", "ki"))
+plot_error_freq_sync = config.freq_sync.plot_error
+kp_freq_sync = config.freq_sync.kp
+ki_freq_sync = config.freq_sync.ki
 def freq_sync(data):
     #costas loop
     if plot_error_freq_sync:
         e2_array = np.zeros_like(data)
-        true_phase_offsett = float(read_config_parameter("simulator", "phase_offsett"))
+        true_phase_offsett = config.simulator.phasE_offsett
     e1_int = 0
     e2 = 0
     data_out = np.zeros_like(data)
@@ -60,17 +60,17 @@ def freq_sync(data):
 
 class SYNCHRONIZATION():
     def __init__(self):
-        buffer_size = int(read_config_parameter("adalm_pluto", "rx_buffer_size"))
-        symboles_per_second = float(read_config_parameter("general", "symboles_per_second"))
-        self.sps_rx = int(read_config_parameter("filter", "sps_rx"))
+        buffer_size = config.adalm_pluto.rx_buffer_size
+        symboles_per_second = config.general.symboles_per_second
+        self.sps_rx = config.filter.sps_rx
         self.fs = symboles_per_second*self.sps_rx
-        self.package_size = int(read_config_parameter("general", "package_size"))
+        self.package_size = config.general.package_size
 
         self.f_for_course_freq_sync = np.fft.fftfreq(buffer_size, d=1/self.fs) #np.linspace(-self.fs/2.0, self.fs/2.0, buffer_size)
         self.t_for_course_freq_sync = np.linspace(0, 1/self.fs * buffer_size, buffer_size)
 
-        self.time_sync_ki = float(read_config_parameter("downsampler", "ki_symbolsync"))
-        self.time_sync_kp = float(read_config_parameter("downsampler", "kp_symbolsync"))
+        self.time_sync_ki = config.downsampler.ki_symbolsync
+        self.time_sync_kp = config.downsampler.kp_symbolsync
         self.time_sync_sampling_steps_queue = queue.Queue(maxsize=1) #Used for plotting eye diagram
         self.time_sync_sampling_times_queue = queue.Queue(maxsize=1) #Used for plotting eye diagram
         self.time_sync_data_queue = queue.Queue(maxsize=1) ##Used for plotting eye diagram
@@ -226,7 +226,7 @@ class SYNCHRONIZATION():
 if __name__ == "__main__":
     filter = filter.FILTERS()
 
-    filter_remove = int(read_config_parameter("filter", "span"))*int(read_config_parameter("filter", "sps_rx"))
+    filter_remove = config.filter.span*config.filter.sps_rx
     
     plt.show()
 
@@ -239,7 +239,7 @@ if __name__ == "__main__":
 
     try:
         while plt.fignum_exists(sync.eye_fig.number):
-            package_size = int(read_config_parameter("general", "package_size"))
+            package_size = config.general.package_size
             indata = np.random.randint(0, 2, package_size*2)
             indata = modulation.modulator(indata)
             indata = filter.tx_filter(indata)

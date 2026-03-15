@@ -1,21 +1,19 @@
 
 import scipy as sp
-from radio_interface.config import read_config_parameter
-from modulation import modulator
-from filter import FILTERS
+from . import config
+from .modulation import modulator
+from .filter import FILTERS
 import numpy as np
 import matplotlib.pyplot as plt
 import queue
 
 class PREAMBLE():
-    def __init__(self):    
-        self.correlation_treshold = float(read_config_parameter("preamble_detector", "correlation_treshold"))
-        
-        self.preamble = np.array(list(map(int, list(format(int(read_config_parameter("general", "preamble"), base=16), 'b'))))) #ikke tenkt på det, det funker
+    def __init__(self):            
+        self.preamble = np.array(list(map(int, list(format(config.general.preamble, 'b'))))) #ikke tenkt på det, det funker
 
-        sps_rx = int(read_config_parameter("filter", "sps_rx"))
-        sps_tx = int(read_config_parameter("filter", "sps_tx"))
-        span = int(read_config_parameter("filter", "span"))
+        sps_rx = config.filter.sps_rx
+        sps_tx = config.filter.sps_tx
+        span = config.filter.span
         modulated_preamble = modulator(self.preamble)
         filters = FILTERS()
         self.reference_signal = filters.rx_filter(sp.signal.resample_poly(filters.tx_filter(modulated_preamble), up=sps_rx, down=sps_tx))
@@ -23,10 +21,9 @@ class PREAMBLE():
         
         self.peak_to_start_of_signal = -np.size(self.reference_signal)+1 + sps_rx*span #don't ask, i do not know why it is not sps_rx*span/2
 
-        self.old_data = np.zeros(int(read_config_parameter("adalm_pluto", "rx_buffer_size"))) #old data, used to look for preamble
+        self.old_data = np.zeros(config.adalm_pluto.rx_buffer_size) #old data, used to look for preamble
 
-        package_size = int(read_config_parameter("general", "package_size"))
-        self.min_distance_between_peaks = package_size*sps_rx*2
+        self.min_distance_between_peaks = config.general.package_size*config.filter.sps_rx*2
         print("min distance between peaks: {}".format(self.min_distance_between_peaks))
 
 
@@ -43,7 +40,7 @@ class PREAMBLE():
         noise_floor = np.median(np.abs(conc_data))
         cross_cor = np.abs(sp.signal.correlate(conc_data, self.reference_signal, mode="valid"))
         
-        treshold = self.correlation_treshold*noise_floor
+        treshold = config.preamble_detector.correlation_treshold*noise_floor
         if self.calibration_counter < 10: #calibration of treshold going on
             
             self.calibration_counter += 1

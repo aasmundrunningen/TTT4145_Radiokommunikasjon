@@ -3,34 +3,27 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from scipy.signal import upfirdn, butter, lfilter, lfiltic, freqz
-from radio_interface.config import read_config_parameter
+from . import config
 
 
 class FILTERS():
     def __init__(self):
-        tx_beta= float(read_config_parameter("filter", "beta"))
-        tx_span= float(read_config_parameter("filter", "span"))
-        self.tx_sps = int(read_config_parameter("filter", "sps_tx"))
-        t, self.tx_filter_taps, h_f = self.get_RRcos_filter_taps(tx_beta, tx_span, self.tx_sps)
-
-        rx_beta= float(read_config_parameter("filter", "beta"))
-        rx_span= float(read_config_parameter("filter", "span"))
-        rx_sps = int(read_config_parameter("filter", "sps_rx"))
-        t, self.rx_filter_taps, h_f = self.get_RRcos_filter_taps(rx_beta, rx_span, rx_sps)
+        t, self.tx_filter_taps, h_f = self.get_RRcos_filter_taps(config.filter.beta, config.filter.span, config.filter.sps_tx)
+        t, self.rx_filter_taps, h_f = self.get_RRcos_filter_taps(config.filter.beta, config.filter.span, config.filter.sps_rx)
         self.rx_filter_state = lfiltic(b=self.rx_filter_taps, a=[1], y=0) #initial state of filter
 
-        rx_recive_freq = float(read_config_parameter("adalm_pluto", "rx_recive_freq"))
-        rx_lo_freq = float(read_config_parameter("adalm_pluto", "rx_lo_freq"))
-        max_freq_offset_ppm = float(read_config_parameter("adalm_pluto", "max_freq_offset_ppm"))
-        symboles_per_second = float(read_config_parameter("general", "symboles_per_second"))
-        sps_rx = float(read_config_parameter("filter", "sps_rx"))
+        rx_recive_freq = config.adalm_pluto.rx_recive_freq
+        rx_lo_freq = config.adalm_pluto.rx_lo_freq
+        max_freq_offset_ppm = config.adalm_pluto.max_freq_offset_ppm
+        symboles_per_second = config.general.symboles_per_second
         
-        self.fs = symboles_per_second*sps_rx
+        
+        self.fs = symboles_per_second*config.filter.sps_rx
 
-        signal_bandwidth = (1+rx_beta)*symboles_per_second/2 #one sided bandwidth out of RRC filter
+        signal_bandwidth = (1+config.filter.beta)*symboles_per_second/2 #one sided bandwidth out of RRC filter
         input_bandwidth = signal_bandwidth + rx_lo_freq*2*max_freq_offset_ppm*1e-6 #one sided input bandwidth
         butterwort_low_freq = rx_recive_freq - rx_lo_freq - input_bandwidth
-        nyquist_freq = symboles_per_second*sps_rx/2
+        nyquist_freq = symboles_per_second*config.filter.sps_rx/2
         if butterwort_low_freq + input_bandwidth > nyquist_freq:
             print("FILTERS: signal goes outside nyquist limit")
         if butterwort_low_freq < 0:
@@ -76,7 +69,7 @@ class FILTERS():
     def tx_filter(self, data):
         return upfirdn(h = self.tx_filter_taps,
                     x = data,
-                    up = self.tx_sps,
+                    up = config.filter.sps_tx,
                     down = 1)
 
     def rx_filter(self, data):
@@ -90,10 +83,10 @@ class FILTERS():
         return filtdata
 
     def plot_filter(self):
-        beta = float(read_config_parameter("filter", "beta"))
-        span= float(read_config_parameter("filter", "span"))
-        sps_rx = int(read_config_parameter("filter", "sps_rx"))
-        sps_tx = int(read_config_parameter("filter", "sps_rx"))
+        beta = config.filter.beta
+        span= config.filter.span
+        sps_rx = config.filter.sps_rx
+        sps_tx = config.filter.sps_tx
 
         t, h_t_rx, h_f_rx = self.get_RRcos_filter_taps(beta, span, sps_rx)
         t, h_t_tx, h_f_tx = self.get_RRcos_filter_taps(beta, span, sps_tx)
@@ -131,7 +124,7 @@ if __name__ == "__main__":
     filters.plot_filter()
 
     w, h = freqz(filters.bandpass_b_coeff, filters.bandpass_a_coeff, worN=8000, fs=filters.fs)
-    w += float(read_config_parameter("adalm_pluto", "rx_lo_freq"))
+    w += config.adalm_pluto.rx_lo_freq
     w *= 1e-6
     plt.plot(w, 20 * np.log10(np.maximum(abs(h), 1e-5)))
     plt.title("Butterworth Filter Response")

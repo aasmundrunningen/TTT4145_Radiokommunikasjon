@@ -1,4 +1,4 @@
-import config
+import modules.config as config
 import adi
 import time
 import multiprocessing
@@ -9,19 +9,28 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 #Hardware communication, must be seperate to make it work with how processes are spawned
-def hardware_communication_loop(rx_q, tx_q, rx_plot_q, stop_event):
+def hardware_communication_loop(ip, rx_q, tx_q, rx_plot_q, stop_event):
     rx_q.cancel_join_thread() #Ques sending to main program need to not hang, otherwise it causes issues
     rx_plot_q.cancel_join_thread()
     
     signal.signal(signal.SIGINT, signal.SIG_IGN) #ignores the keyboard interrupt
     print("HARDWARE COMMUNICATION LOOP: started process")
+    print(f"HARDWARE COMMUNICATION LOOP: ip address {ip}")
     
     sample_rate = config.general.symboles_per_second*config.filter.sps_rx
     print(f"Sampling rate {sample_rate} samples/s")
     print(f"TX lo: {int(config.adalm_pluto.tx_lo_freq)}")
 
     #setup of ADALM PLUTO
-    sdr                             =  adi.Pluto(config.adalm_pluto.ip)
+    try:
+        sdr                             =  adi.Pluto(ip)
+    except Exception as e:
+        if "No device found" in str(e):
+            print(f"[ERROR]: HARDWARE COMMUNICATION LOOP: sdr not found, {ip}")
+            print(f"HARDWARE COMMUNICATION LOOP: stops loop")
+            return
+        else:
+            raise e
     sdr.sample_rate                 = sample_rate
     sdr.tx_lo                       = int(config.adalm_pluto.tx_lo_freq)
     sdr.tx_hardwaregain_chan0       = int(config.adalm_pluto.tx_gain)
@@ -72,13 +81,18 @@ def hardware_communication_loop(rx_q, tx_q, rx_plot_q, stop_event):
 
 #class for interacting with the SDR
 class HARDWARE_COMMUNICATION(): 
-    def __init__(self):
+    def __init__(self, ip=None):
+        if ip == None:
+            ip = config.adalm_pluto.ip
+        
+        print(ip)
+
         self.rx_q = multiprocessing.Queue(maxsize=10)
         self.rx_plot_q = multiprocessing.Queue(maxsize=10) #for plotting of recived power
         self.tx_q = multiprocessing.Queue(maxsize=10)
         self.stop_event = multiprocessing.Event()
         
-        self.hardware_process = multiprocessing.Process(target=hardware_communication_loop, args=(self.rx_q, self.tx_q, self.rx_plot_q, self.stop_event), daemon=True)
+        self.hardware_process = multiprocessing.Process(target=hardware_communication_loop, args=(ip, self.rx_q, self.tx_q, self.rx_plot_q, self.stop_event), daemon=True)
         self.hardware_process.start()
 
     def enable_rx_power_plot(self):
@@ -97,11 +111,11 @@ class HARDWARE_COMMUNICATION():
         try:
             while not self.rx_plot_q.empty():
                 rx_data = self.rx_plot_q.get_nowait()
-                pow = 10*np.log10(np.sum(np.pow(np.abs(rx_data), 2)))
+                pow = 20*np.log10(np.sum(np.abs(rx_data)))
                 self.power = np.concatenate((self.power[1:], [pow]))
             x = np.arange(np.size(self.power))
             self.rx_line.set_data(x, self.power)
-            self.rx_ax.set_ylim(0,100)
+            self.rx_ax.set_ylim(100,200)
             return self.rx_line
         except queue.Empty:
             return self.rx_line
@@ -124,7 +138,7 @@ class HARDWARE_COMMUNICATION():
 if __name__ == "__main__":
     try:
         print("Starting hardware process")
-        hardware_process = HARDWARE_COMMUNICATION()
+        hardware_process = HARDWARE_COMMUNICATION(ip="ip:192.168.3.1")
         rx_q = hardware_process.get_rx_queue()
         tx_q = hardware_process.get_tx_queue()
         hardware_process.enable_rx_power_plot()
