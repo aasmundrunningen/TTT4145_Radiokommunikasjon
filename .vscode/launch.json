@@ -1,0 +1,7 @@
+{
+  "name": "Run hardware_process (file)",
+  "type": "python",
+  "request": "launch",
+  "program": "${file}",
+  "cwd": "${workspaceFolder}"
+}
