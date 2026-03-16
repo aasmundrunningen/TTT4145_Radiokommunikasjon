@@ -66,8 +66,8 @@ class SYNCHRONIZATION():
         self.fs = symboles_per_second*self.sps_rx
         self.package_size = config.general.package_size
 
-        self.f_for_course_freq_sync = np.fft.fftfreq(buffer_size, d=1/self.fs) #np.linspace(-self.fs/2.0, self.fs/2.0, buffer_size)
-        self.t_for_course_freq_sync = np.linspace(0, 1/self.fs * buffer_size, buffer_size)
+        self.f_for_course_freq_sync = np.fft.fftfreq(4*buffer_size, d=1/(4*self.fs)) #times 4 as it is upsampled
+        self.t_for_course_freq_sync = np.linspace(0, 1/(self.fs) * buffer_size, buffer_size)
 
         self.time_sync_ki = config.downsampler.ki_symbolsync
         self.time_sync_kp = config.downsampler.kp_symbolsync
@@ -79,9 +79,11 @@ class SYNCHRONIZATION():
         self.constalation_data_queue = queue.Queue(maxsize=1) ##Used for plotting constalation
 
     def course_freq_sync(self, data):
-        psd = np.abs(np.fft.fft(np.pow(data,4))) #to power of 4 to remove modulation for QPSK
+        upsampled_data = sp.signal.resample_poly(data, 4, 1) #upsample to increase bandwidth and not get aliasing
+        psd = np.abs(np.fft.fft(np.pow(upsampled_data,4))) #to power of 4 to remove modulation for QPSK
         max_freq = self.f_for_course_freq_sync[np.argmax(psd)]
-        data = data * np.exp(1j*2*np.pi*self.t_for_course_freq_sync*max_freq/2) #quarter of maxfreq due to squaring moving peak to 4*delta_f
+        print(max_freq/4*1e-3)
+        data = data * np.exp(-1j*2*np.pi*self.t_for_course_freq_sync*max_freq/4) #quarter of maxfreq due to squaring moving peak to 4*delta_f
         return data
 
     #@njit #precompiles this section to not have the for loop overhead

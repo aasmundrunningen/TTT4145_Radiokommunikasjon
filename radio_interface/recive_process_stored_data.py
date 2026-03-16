@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
@@ -12,27 +13,20 @@ import modules.config as config
 from modules.filter import FILTERS
 from modules.modulation import demodulator
 from modules.data_detector import PREAMBLE
+from modules.syncronisation import SYNCHRONIZATION
 
 #for data retrival
 import data_logger
 
-
-
-fig, ax = plt.subplots(2,2)
-
-plot_line_0, =  ax[0][0].plot([], [])
-plot_line_0_data = []
-
-
-def update_frame(frame):
-    plot_line_0.set_data(np.arange(np.size(plot_line_0_data)), plot_line_0_data)
-    ax[0][0].set_ylim(0, 1)
-    ax[0][0].set_xlim(0, np.size(plot_line_0_data))
-    return plot_line_0
-
-
-animation = FuncAnimation(fig, update_frame, interval=100, cache_frame_data=False) #intervall is time in ms between frames
-plt.show(block=False)
+#for doing live drawing
+plt.ion()#for doing updating plots
+fig, ax = plt.subplots(3,3)
+plot_lines = []
+for j in range(3):
+    plot_lines.append([])
+    for i in range(3):
+        line, = ax[j][i].plot([], [])
+        plot_lines[j].append(line)
 
 #runs trough all data in the file
 data = data_logger.retrieve_data("radio_interface/data_logs/recived_data_1503_01.npz")
@@ -40,14 +34,47 @@ data = data_logger.retrieve_data("radio_interface/data_logs/recived_data_1503_01
 
 filter = FILTERS()
 preamble = PREAMBLE()
+sync = SYNCHRONIZATION()
+
+
+RC_filt_data = np.zeros(config.adalm_pluto.rx_buffer_size)
 
 for i, recived_data in enumerate(data):
-    print(f"\rreciving data {i}", end="", flush=True)
+    #print(f"\rreciving data {i}", end="", flush=True)
     
-    plot_line_0_data = np.abs(np.real(recived_data)) #prints the recived real power 
+    #data handling of recived data
+    bandpassed_data       = filter.rx_bandpass_filter(recived_data)
+    course_freq_sync_data = sync.course_freq_sync(bandpassed_data)
+    old_rc_filt_data      = RC_filt_data
+    RC_filt_data          = filter.rx_filter(course_freq_sync_data)
+    detected_peaks        = preamble.detector(old_rc_filt_data, RC_filt_data)
 
+    #ploting
+    data_size = np.size(recived_data)
+    data_range = np.arange(np.size(recived_data))
+    freq = np.fft.fftfreq(data_size, 1/(config.general.symboles_per_second*config.filter.sps_rx))*1e-3
+    plot_lines[0][0].set_data(data_range, np.abs(np.real(recived_data))) #recived real power
+    plot_lines[1][0].set_data(freq, 10*np.log10(np.abs(np.fft.fft(recived_data))))
+    plot_lines[1][1].set_data(freq, 10*np.log10(np.abs(np.fft.fft(bandpassed_data))))
+    plot_lines[1][2].set_data(freq, 10*np.log10(np.abs(np.fft.fft(course_freq_sync_data))))
+    
 
-    plt.pause(0.2) #lets the frame update
+    upsampled_data = sp.signal.resample_poly(bandpassed_data, 4, 1) #upsample to increase bandwidth and not get aliasing
+    fft_up_4_times = 10*np.log10(np.abs(np.fft.fft(np.pow(upsampled_data,4))))
+    freq_up = np.fft.fftfreq(data_size*4, 1/(4*config.general.symboles_per_second*config.filter.sps_rx))*1e-3
+    plot_lines[2][0].set_data(freq_up, fft_up_4_times)
+    #print(f"max value {np.max(10*np.log10(np.abs(np.fft.fft(np.pow(bandpassed_data,4)))))} at {freq[np.argmax(10*np.log10(np.abs(np.fft.fft(np.pow(bandpassed_data,4)))))]*1e-3}kHz")
+    ax[0][0].set_xlim(0, data_size)
+    ax[0][0].set_ylim(0, 1)
+    for i in range(3):
+        ax[1][i].set_ylim(0, 30)
+        ax[1][i].set_xlim(np.min(freq), np.max(freq))
+        ax[2][i].set_ylim(-100, 30)
+        ax[2][i].set_xlim(np.min(freq_up), np.max(freq_up))
+    
+    
+    plt.draw()
+    plt.pause(0.4) #lets the frame update
 
 
 print("")
