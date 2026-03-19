@@ -13,7 +13,7 @@ if __name__ == "__main__":
         tx_q1 = hardware_process2.get_tx_queue()
 
         transmitt_process = TRANSMITT_PROCESS(tx_q=tx_q1) #starts transmitt process and hook it up to transmitt queue on hardware communication
-
+        
         with open("radio_interface/data_logs/lydtest_bits.txt", "r") as file:
             binary_audio_data = file.read()
             print(f"binary data size {np.size(binary_audio_data)}")
