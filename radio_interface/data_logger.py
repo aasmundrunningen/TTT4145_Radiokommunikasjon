@@ -28,39 +28,39 @@ def retrieve_data(filename):
     
 #run main to log data
 if __name__ == "__main__":
-    path = "radio_interface/data_logs/recived_data_1503_01.npz"
+    path = "radio_interface/data_logs/recived_data_1503_0432.npz"
     print("Starting hardware process")
-    hardware_process1 = HARDWARE_COMMUNICATION(ip="ip:192.168.3.1")
+    #hardware_process1 = HARDWARE_COMMUNICATION(ip="ip:192.168.3.1")
     hardware_process2 = HARDWARE_COMMUNICATION(ip="ip:192.168.2.1")
     
     #hardware_process2.enable_rx_power_plot()
-    tx_q1 = hardware_process1.get_tx_queue()
+    #tx_q1 = hardware_process1.get_tx_queue()
     rx_q2 = hardware_process2.get_rx_queue()
-    transmitt_process = TRANSMITT_PROCESS(tx_q=tx_q1) #starts transmitt process and hook it up to transmitt queue on hardware communication
+    #transmitt_process = TRANSMITT_PROCESS(tx_q=tx_q1) #starts transmitt process and hook it up to transmitt queue on hardware communication
     
     binary_tx_data = np.random.randint(0,2,1000)
 
     recive_data = []
-    N = 10 #number of packages to transmitt
+    N = 20 #number of packages to transmitt
 
 
 
     print("Starting while loop")
     i = 0
 
-    time_between_transmitt = 1 #in seconds
+    time_between_transmitt = 0.5 #in seconds
     last_transmitt_time = 0
 
     while i < N:
             #tries to transmitt a sequence
             if last_transmitt_time + time_between_transmitt < time.perf_counter():
                 try:
-                    transmitt_process.binary_q.put_nowait(binary_tx_data)
+                    #transmitt_process.binary_q.put_nowait(binary_tx_data)
                     i += 1
                     last_transmitt_time = time.perf_counter()
                 except queue.Full:
                         pass
-                
+             
             #empties recive buffer 
             while True:
                 try:
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     log_data(path, recive_data)
 
 
-    transmitt_process.stop()
-    hardware_process1.stop()
+    #transmitt_process.stop()
+    #hardware_process1.stop()
     hardware_process2.stop()
     print("stops program")

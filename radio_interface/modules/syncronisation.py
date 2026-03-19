@@ -78,13 +78,25 @@ class SYNCHRONIZATION():
 
         self.constalation_data_queue = queue.Queue(maxsize=1) ##Used for plotting constalation
 
+        self.preamble_binary = np.array(list(map(int, list(format(config.general.preamble, 'b'))))) #ikke tenkt på det, det funker
+        self.preamble_modulated_conjugated = np.conjugate(modulation.modulator(self.preamble_binary))
+
     def course_freq_sync(self, data):
         upsampled_data = sp.signal.resample_poly(data, 4, 1) #upsample to increase bandwidth and not get aliasing
         psd = np.abs(np.fft.fft(np.pow(upsampled_data,4))) #to power of 4 to remove modulation for QPSK
         max_freq = self.f_for_course_freq_sync[np.argmax(psd)]
-        print(max_freq/4*1e-3)
         data = data * np.exp(-1j*2*np.pi*self.t_for_course_freq_sync*max_freq/4) #quarter of maxfreq due to squaring moving peak to 4*delta_f
         return data
+
+    #Uses linear interpolation on preamble to estimate phase and frequency offsett.
+    def data_driven_phase_sync(self, data):
+        recived_preamble = data[0:np.size(self.preamble_modulated_conjugated)] 
+        phase_differences = np.angle(recived_preamble*self.preamble_modulated_conjugated)
+        #freq_estimate, phase_estimate = np.polyfit(np.arange(np.size(phase_differences)), phase_differences,deg=1) #linear interpolation
+        phase_estimate = phase_differences[0]
+        outdata = data * np.exp(-1j*(phase_estimate))
+        #outdata = data * np.exp(-1j*(phase_estimate + freq_estimate*np.arange(np.size(data))))
+        return outdata
 
     #@njit #precompiles this section to not have the for loop overhead
     def timing_sync_gardner(self, data):
@@ -199,7 +211,7 @@ class SYNCHRONIZATION():
          # We don't start a thread here anymore!
         # Instead, we set up the figure and the animation.
         self.constalation_fig, self.ax = plt.subplots()
-        self.constalation_line, = self.ax.plot([], [], ".")
+        self.constalation_line = self.ax.scatter([], [], s=1)
         self.ax.set_ylim(-2,2) # Adjust based on your signal levels
         self.ax.set_xlim(-2, 2)
 
@@ -218,7 +230,7 @@ class SYNCHRONIZATION():
     def update_constalation_plot(self, frame):
         try:
             data = self.constalation_data_queue.get_nowait()
-            self.constalation_line.set_data(np.real(data), np.imag(data))
+            self.constalation_line.set_offsets(np.c_[np.real(data), np.imag(data)])
         except queue.Empty:
             pass
     
