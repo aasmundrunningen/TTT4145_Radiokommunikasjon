@@ -33,12 +33,13 @@ class PREAMBLE():
         #for plotting of correlation
         self.correlation_plot_queue = queue.Queue(maxsize=1) #Queue size of 1 to remove backlog
         self.ylim_plot = 0
+        print(f"peak to start of signal {self.peak_to_start_of_signal}")
 
     def get_binary_preamble(self):
         return self.preamble
 
     def detector(self, data, new_data):
-        conc_data = np.concatenate((data, new_data[:-self.peak_to_start_of_signal])) #ensures that it handles preambles in between packages
+        conc_data = np.concatenate((data, new_data[:config.filter.sps_rx*config.filter.span])) #ensures that it handles preambles in between packages
         #data_power = np.sqrt(np.sum(np.pow(np.abs(data), 2)) * np.sum(np.pow(np.abs(self.reference_signal),2)))
         noise_floor = np.median(np.abs(conc_data))
         cross_cor = np.abs(sp.signal.correlate(conc_data, self.reference_signal, mode="valid"))

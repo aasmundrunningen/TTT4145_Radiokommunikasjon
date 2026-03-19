@@ -27,8 +27,8 @@ def demodulator(modulated_data):
             print("ERROR: function modulator: binary data is not a even number")
             return None
         else:
-            real_data = np.real(modulated_data) > 0 #converts both branches to binary data
-            imag_data = np.imag(modulated_data) > 0
+            real_data = (np.real(modulated_data) > 0).astype(int) #converts both branches to binary data
+            imag_data = (np.imag(modulated_data) > 0).astype(int)
             return np.array([real_data, imag_data]).flatten("F")
     else:
         print("ERROR: function modulator: modulation type not supported")
