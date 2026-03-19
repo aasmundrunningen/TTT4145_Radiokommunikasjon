@@ -16,12 +16,14 @@ if __name__ == "__main__":
 
         with open("radio_interface/data_logs/lydtest_bits.txt", "r") as file:
             binary_audio_data = file.read()
+            print(f"binary data size {np.size(binary_audio_data)}")
             data_packages = []
             for i in range(np.size(binary_audio_data)//120):
                  data_packages.append(binary_audio_data[i*120:(i+1)*120])
         
         plt.pause(2)
         input("Write start to start transmitting")
+        print(np.shape(data_packages))
         for binary_tx_data in data_packages:
                 transmitt_process.binary_q.put(binary_tx_data)
                 plt.pause(0.02)

@@ -36,7 +36,7 @@ for j in range(3):
         plot_lines[j].append(line)
 
 #runs trough all data in the file
-data = data_logger.retrieve_data("radio_interface/data_logs/recived_data_1503_01.npz")
+data = data_logger.retrieve_data("radio_interface/data_logs/recived_data_1903_01_sound.npz")
 
 
 filter = FILTERS()
@@ -46,6 +46,8 @@ sync = SYNCHRONIZATION()
 #sync.enable_eye_plot()
 
 RC_filt_data = np.zeros(config.adalm_pluto.rx_buffer_size)
+
+recived_binary_data = []
 
 for i, recived_data in enumerate(data):
     #print(f"\rreciving data {i}", end="", flush=True)
@@ -57,13 +59,15 @@ for i, recived_data in enumerate(data):
     RC_filt_data          = filter.rx_filter(course_freq_sync_data)
     detected_start_of_packages        = preamble.detector(old_rc_filt_data, RC_filt_data)
 
+    
+
     for sop in detected_start_of_packages:
         data_package = np.concatenate([old_rc_filt_data, RC_filt_data])[sop:sop + (config.general.package_size+1)*config.filter.sps_rx]
         downsampled_data = sync.timing_sync_power_selector(data_package)
         sync.pass_data_to_constalation_plot(downsampled_data)
         phase_synced_data = sync.data_driven_phase_sync(downsampled_data)
         binary_data = demodulator(phase_synced_data)
-        
+        #print(f"lenght of lists: phase_synced_data: {np.shape(phase_synced_data)}, downsampled_data: {np.size(downsampled_data)}, data_package: {np.size(data_package)}")
         
         binary_data_without_preamble, result_code = preamble.remove_preamble(binary_data)
         if result_code == 1:
@@ -71,6 +75,7 @@ for i, recived_data in enumerate(data):
         else:
             print("Nooooo! wrong preamble code")
 
+        recived_binary_data.extend(binary_data_without_preamble)
 
         plot_lines[2][1].set_data(np.real(phase_synced_data), np.imag(phase_synced_data))
         plot_lines[2][1].set_marker(".")
@@ -104,8 +109,12 @@ for i, recived_data in enumerate(data):
     
     
     plt.draw()
-    plt.pause(0.5) #lets the frame update
+    plt.pause(0.2) #lets the frame update
 
+with open("radio_interface/data_logs/recived_binary_data.txt", "w") as file:
+    string = ""
+    string = string.join(np.array(recived_binary_data).astype(str))
+    file.write(string)
 
 print("")
 print(f"real max: {np.max(np.real(data))}, real min {np.min(np.real(data))} imag maks: {np.max(np.imag(data))} imag min {np.min(np.imag(data))}")    

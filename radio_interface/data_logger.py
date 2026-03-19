@@ -28,7 +28,7 @@ def retrieve_data(filename):
     
 #run main to log data
 if __name__ == "__main__":
-    path = "radio_interface/data_logs/recived_data_1503_0432.npz"
+    path = "radio_interface/data_logs/recived_data_1903_02_sound.npz"
     print("Starting hardware process")
     #hardware_process1 = HARDWARE_COMMUNICATION(ip="ip:192.168.3.1")
     hardware_process2 = HARDWARE_COMMUNICATION(ip="ip:192.168.2.1")
@@ -41,14 +41,14 @@ if __name__ == "__main__":
     binary_tx_data = np.random.randint(0,2,1000)
 
     recive_data = []
-    N = 20 #number of packages to transmitt
+    N = 60 #number of packages to transmitt
 
 
 
     print("Starting while loop")
     i = 0
 
-    time_between_transmitt = 0.5 #in seconds
+    time_between_transmitt = 1 #in seconds
     last_transmitt_time = 0
 
     while i < N:

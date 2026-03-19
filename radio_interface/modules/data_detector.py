@@ -66,7 +66,7 @@ class PREAMBLE():
     
     #returns data and 1 if preamble is detected correcly and 0 if preamble not correct
     def remove_preamble(self, data):
-        if data[0:np.size(self.preamble)] == self.preamble:
+        if np.array_equal(data[0:np.size(self.preamble)], self.preamble):
             return data[np.size(self.preamble):], 1
         else:
             return data[np.size(self.preamble):], 0

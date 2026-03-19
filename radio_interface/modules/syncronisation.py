@@ -138,10 +138,10 @@ class SYNCHRONIZATION():
     def timing_sync_power_selector(self, data):
         power = np.zeros(self.sps_rx)
         for i in range(self.sps_rx):
-            power[i] = np.sum(np.abs(data[i:i+package_size:self.sps_rx]))
+            power[i] = np.sum(np.abs(data[i:i+package_size*self.sps_rx:self.sps_rx]))
         
         i = np.argmax(power)
-        outdata = data[i:i+package_size:self.sps_rx]
+        outdata = data[i:i+package_size*self.sps_rx:self.sps_rx]
         try:
             self.time_sync_sampling_steps_queue.put_nowait(np.zeros(np.size(outdata))+self.sps_rx)
             self.time_sync_sampling_times_queue.put_nowait(np.arange(np.size(outdata))*self.sps_rx + i)

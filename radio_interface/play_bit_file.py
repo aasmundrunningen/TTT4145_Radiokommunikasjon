@@ -5,7 +5,7 @@ from modules.source_coder import SOURCE_CODER
 
 
 base_dir = os.path.dirname(__file__)
-input_filename = os.path.join(base_dir, "lydtest_bits.txt")
+input_filename = os.path.join(base_dir, "radio_interface/data_logs/recived_binary_data.txt")
 
 with open(input_filename, "r", encoding="utf-8") as f:
     bit_string = f.read().strip()
