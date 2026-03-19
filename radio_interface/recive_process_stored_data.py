@@ -63,6 +63,14 @@ for i, recived_data in enumerate(data):
         sync.pass_data_to_constalation_plot(downsampled_data)
         phase_synced_data = sync.data_driven_phase_sync(downsampled_data)
         binary_data = demodulator(phase_synced_data)
+        
+        
+        binary_data_without_preamble, result_code = preamble.remove_preamble(binary_data)
+        if result_code == 1:
+            print("Success!! detected correct preamble")
+        else:
+            print("Nooooo! wrong preamble code")
+
 
         plot_lines[2][1].set_data(np.real(phase_synced_data), np.imag(phase_synced_data))
         plot_lines[2][1].set_marker(".")

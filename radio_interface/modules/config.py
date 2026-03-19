@@ -6,7 +6,7 @@ from types import SimpleNamespace
 general = SimpleNamespace(
     symboles_per_second = 80000, 
     preamble = 0xB30FDD4, 
-    package_size = 228,
+    package_size = 148,
     modulation_scheme = "QPSK"
 )
 
