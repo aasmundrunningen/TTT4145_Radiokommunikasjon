@@ -99,6 +99,7 @@ if __name__ == "__main__":
         bin_q = recive_process.get_binary_q()
         binary_data = []
         data = data_logger.retrieve_data("radio_interface/data_logs/recived_data_1903_01_sound.npz")
+        print("Starting test")
         i = 0
         while i < len(data):
             try:

@@ -65,6 +65,8 @@ def hardware_communication_loop(ip, rx_q, tx_q, rx_plot_q, stop_event):
         try:
             rx_plot_q.put_nowait(rx_data)
         except queue.Full:
+            rx_plot_q.get()
+            rx_plot_q.put_nowait(rx_data)
             pass
 
         try:
@@ -88,12 +90,15 @@ class HARDWARE_COMMUNICATION():
         print(ip)
 
         self.rx_q = multiprocessing.Queue(maxsize=10)
-        self.rx_plot_q = multiprocessing.Queue(maxsize=10) #for plotting of recived power
+        self.rx_plot_q = multiprocessing.Queue(maxsize=100) #for plotting of recived power
         self.tx_q = multiprocessing.Queue(maxsize=10)
         self.stop_event = multiprocessing.Event()
         
         self.hardware_process = multiprocessing.Process(target=hardware_communication_loop, args=(ip, self.rx_q, self.tx_q, self.rx_plot_q, self.stop_event), daemon=True)
         self.hardware_process.start()
+
+    def get_rx_plot_q(self):
+        return self.rx_plot_q
 
     def enable_rx_power_plot(self):
         self.rx_fig, self.rx_ax = plt.subplots()

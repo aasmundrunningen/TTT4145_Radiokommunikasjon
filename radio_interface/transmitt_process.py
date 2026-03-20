@@ -39,6 +39,8 @@ class TRANSMITT_PROCESS:
         self.transmitt_process = multiprocessing.Process(target=transmitt_process_loop, args=(self.binary_q, self.tx_q, self.stop_event))
         self.transmitt_process.start()
 
+    def get_binary_q(self):
+        return self.binary_q
 
     def stop(self):
         self.stop_event.set()
