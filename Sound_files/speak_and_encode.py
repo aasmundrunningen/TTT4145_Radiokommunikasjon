@@ -63,7 +63,7 @@ with sd.Stream(samplerate=fs, blocksize=block, dtype='int16',
     try:
         while True:
             data = in_que.get()  # Blokkerer, frem til det finnes en block med lyd.
-            
+            print(data)
             encoded_data = source_coder.source_encoder(data)
             
             #-----------------------------------
