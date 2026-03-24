@@ -12,7 +12,7 @@ general = SimpleNamespace(
 
 # --- ADALM Pluto Hardware ---
 adalm_pluto = SimpleNamespace(
-    ip = "ip:192.168.3.1", #ips is 192.168.2.1 and 192.168.3.1
+    ip = "ip:192.168.2.1", #ips is 192.168.2.1 and 192.168.3.1
     rx_recive_freq = 910e6,
     rx_lo_freq = 909.8e6, # Nyquist limit is 320kHz
     tx_lo_freq = 920e6,

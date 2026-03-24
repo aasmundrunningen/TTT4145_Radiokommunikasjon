@@ -18,8 +18,9 @@ if __name__ == "__main__":
         bin_tx_q = transmitt_process.get_binary_q()
         bin_rx_q = recive_process.get_binary_q()
         sound = SOUND(bin_tx_q, bin_rx_q)
-        sound.record()
-        sound.play()
+        sound.stream()
+        #sound.record()
+        #sound.play()
 
         while True:
             #while not bin_rx_q.empty():

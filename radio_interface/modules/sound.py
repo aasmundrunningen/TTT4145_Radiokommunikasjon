@@ -29,6 +29,7 @@ class SOUND:
 
     def callback_record(self, indata, frames, time, status):
         if status:
+            print("Dette er callback error fra sound record")
             print(status, file=sys.stderr)
         ## snder data fra mikrofon til in_que
         if self.in_que is None:
@@ -44,21 +45,28 @@ class SOUND:
 
     def callback_play(self, outdata, frames, time, status):
         if status:
+            print("Dette er callback error fra sound play")
             print(status, file=sys.stderr)
 
         # spill av dekodet PCM fra out_q (hvis tilgjengelig)
         try:
-            
             encoded_data = self.out_que.get_nowait()
+
+        except queue.Empty:
+            outdata.fill(0)
+            return
+        try:
             decoded_data = self.source_coder.source_decoder(encoded_data)
             outdata[:] = decoded_data
-        except queue.Empty:
+        except Exception as e:
+            print("Her er det dekodet feil gitt: {e}")
             outdata.fill(0)
 
 
 
     def callback_stream(self, indata, outdata, frames, time, status):
         if status:
+            print("Dette er callback error fra sound stream")
             print(status, file=sys.stderr)
         if self.in_que is None:
             return
@@ -72,9 +80,15 @@ class SOUND:
         # spill av dekodet PCM fra out_q (hvis tilgjengelig)
         try:
             encoded_data = self.out_que.get_nowait()
+
+        except queue.Empty:
+            outdata.fill(0)
+            return
+        try:
             decoded_data = self.source_coder.source_decoder(encoded_data)
             outdata[:] = decoded_data
-        except queue.Empty:
+        except Exception as e:
+            print("Her er det dekodet feil gitt: {e}")
             outdata.fill(0)
 
     def record(self):
@@ -87,7 +101,8 @@ class SOUND:
         self.play_sound.start()
 
     def stream(self):
-        self.stream = sd.Stream(samplerate=self.fs, blocksize=self.block, dtype='int16',channels=self.channels, callback=self.callback_stream)
+        self.stream_sound = sd.Stream(samplerate=self.fs, blocksize=self.block, dtype='int16',channels=self.channels, callback=self.callback_stream)
+        self.stream_sound.start()
 
     def stop_record(self):
         if self.input_stream is not None:
