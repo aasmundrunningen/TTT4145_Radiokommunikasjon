@@ -1,7 +1,7 @@
 import numpy as np
 import opuslib
 import scipy.signal as sig
-import config as config
+from . import config
 
 
 class SOURCE_CODER:

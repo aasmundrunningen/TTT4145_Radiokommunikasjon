@@ -5,10 +5,9 @@ import queue #Brukes til å lage en FIFO, first in first out kø
 import numpy as np
 import sounddevice as sd #Bruker for å ta imot lyd fra mikrofon og spille av. 
 import matplotlib.pyplot as plt
-from source_coder import SOURCE_CODER
-import config
+from . import source_coder
+from . import config
 import sys
-from source_coder import SOURCE_CODER
 
 
 
@@ -21,10 +20,12 @@ class SOUND:
         self.bitrate = int(config.source_coder.bitrate)        # 6 kb/s target
         self.block = int(self.frame_samples) # Hvor mange samples vi får per callback.
         
-        self.source_coder = SOURCE_CODER()
+        self.source_coder = source_coder.SOURCE_CODER()
 
         self.in_que = in_q
         self.out_que = out_q
+
+
 
     def callback_record(self, indata, frames, time, status):
         if status:
@@ -40,6 +41,7 @@ class SOUND:
             pass
 
 
+
     def callback_play(self, outdata, frames, time, status):
         if status:
             print(status, file=sys.stderr)
@@ -47,6 +49,28 @@ class SOUND:
         # spill av dekodet PCM fra out_q (hvis tilgjengelig)
         try:
             
+            encoded_data = self.out_que.get_nowait()
+            decoded_data = self.source_coder.source_decoder(encoded_data)
+            outdata[:] = decoded_data
+        except queue.Empty:
+            outdata.fill(0)
+
+
+
+    def callback_stream(self, indata, outdata, frames, time, status):
+        if status:
+            print(status, file=sys.stderr)
+        if self.in_que is None:
+            return
+        try:
+            self.in_que.put_nowait(self.source_coder.source_encoder(indata.copy()))
+        except queue.Full:
+            # hvis main-loop henger etter, dropper vi blokker (heller enn å stoppe audio)
+            pass
+
+
+        # spill av dekodet PCM fra out_q (hvis tilgjengelig)
+        try:
             encoded_data = self.out_que.get_nowait()
             decoded_data = self.source_coder.source_decoder(encoded_data)
             outdata[:] = decoded_data
@@ -61,6 +85,9 @@ class SOUND:
     def play(self):
         self.play_sound = sd.OutputStream(samplerate=self.fs, blocksize = self.block, dtype='int16', channels=self.channels, callback=self.callback_play)
         self.play_sound.start()
+
+    def stream(self):
+        self.stream = sd.Stream(samplerate=self.fs, blocksize=self.block, dtype='int16',channels=self.channels, callback=self.callback_stream)
 
     def stop_record(self):
         if self.input_stream is not None:

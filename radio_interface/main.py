@@ -1,7 +1,7 @@
 from hardware_process   import HARDWARE_COMMUNICATION
 from transmitt_process  import TRANSMITT_PROCESS
 from recive_process     import RECIVE_PROCESS
-from modules.sound              import SOUND
+from modules.sound      import SOUND
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     try:
         print("Starting hardware process")
-        hardware_process = HARDWARE_COMMUNICATION(ip="ip:192.168.2.1")
+        hardware_process = HARDWARE_COMMUNICATION()
         tx_q = hardware_process.get_tx_queue()
         rx_q = hardware_process.get_rx_queue()
         rx_plot_q = hardware_process.get_rx_plot_q() #for ploting or storing raw data
@@ -18,8 +18,8 @@ if __name__ == "__main__":
         bin_tx_q = transmitt_process.get_binary_q()
         bin_rx_q = recive_process.get_binary_q()
         sound = SOUND(bin_tx_q, bin_rx_q)
-        #sound.record()
-        #sound.play()
+        sound.record()
+        sound.play()
 
         while True:
             #while not bin_rx_q.empty():
