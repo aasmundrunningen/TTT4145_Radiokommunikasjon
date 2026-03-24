@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from source_coder import SOURCE_CODER
 import config
 import sys
-
+from source_coder import SOURCE_CODER
 
 
 
@@ -20,6 +20,8 @@ class SOUND:
         self.frame_samples = int(self.fs * self.frame_ms / 1000)  # 320 ved 16 kHz
         self.bitrate = int(config.source_coder.bitrate)        # 6 kb/s target
         self.block = int(self.frame_samples) # Hvor mange samples vi får per callback.
+        
+        self.source_coder = SOURCE_CODER()
 
         self.in_que = in_q
         self.out_que = out_q
@@ -32,25 +34,22 @@ class SOUND:
             return
         
         try:
-            self.in_que.put_nowait(indata.copy())
+            self.in_que.put_nowait(self.source_coder.source_encoder(indata.copy()))
+
         except queue.Full:
             pass
 
-        
+
     def callback_play(self, outdata, frames, time, status):
         if status:
             print(status, file=sys.stderr)
-        ## snder data til høyttaler
-        try:
-            self.out_que.get_nowait(outdata.copy())
-
-        except queue.Empty:
-            pass
 
         # spill av dekodet PCM fra out_q (hvis tilgjengelig)
         try:
-            decoded = self.out_que.get_nowait()
-            outdata[:] = decoded
+            
+            encoded_data = self.out_que.get_nowait()
+            decoded_data = self.source_coder.source_decoder(encoded_data)
+            outdata[:] = decoded_data
         except queue.Empty:
             outdata.fill(0)
 
@@ -85,14 +84,15 @@ if __name__ == "__main__":
     #Dette er slik vi setter opp for å recorde lyd fra mikrofon, for så å sende videre. Yiha. 
     if False:
         print('Started recording')
-        in_que = queue.Queue(maxsize=100)
-        out_que = queue.Queue(maxsize=100)
-        sound = SOUND(in_q=in_que, out_q=out_que)
+        tx_que = queue.Queue(maxsize=100)
+        rx_que = queue.Queue(maxsize=100)
+        sound = SOUND(in_q=tx_que, out_q=rx_que)
         sound.record()
 
         try:
             while True:
-                data = in_que.get()
+                data = tx_que.get()
+
                 print(data)
                 #Dette er her vi putter inn data for å kjøre
 
@@ -102,15 +102,15 @@ if __name__ == "__main__":
     #Dette er slik vi setter opp for å lytte. Altså må mottaker siden. 
     if True:
         print('Started playing')
-        in_que = queue.Queue(maxsize=100)
-        out_que = queue.Queue(maxsize=100)
-        sound = SOUND(in_q=in_que,out_q=out_que)
+        tx_que = queue.Queue(maxsize=100)
+        rx_que = queue.Queue(maxsize=100)
+        sound = SOUND(in_q=tx_que,out_q=rx_que)
         sound.play()
         
         try:
             while True:
                 decoded_signal = 0 #Dette skal være det dekodede signalet som vi putter inn i out_que for å spille av! 
-                out_que.put(decoded_signal)
+                rx_que.put(decoded_signal)
 
         except KeyboardInterrupt:
             sound.stop_all()

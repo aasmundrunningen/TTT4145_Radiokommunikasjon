@@ -8,7 +8,6 @@ from modules.modulation import modulator
 from modules.data_detector import PREAMBLE
 import matplotlib.pyplot as plt
 
-
 def transmitt_process_loop(binary_q, tx_q, stop_event):
     tx_q.cancel_join_thread() #stops queue from binding thread under stop
     signal.signal(signal.SIGINT, signal.SIG_IGN) #ignores the keyboard interrupt
@@ -16,6 +15,7 @@ def transmitt_process_loop(binary_q, tx_q, stop_event):
     
     filter = FILTERS()
     preamble = PREAMBLE()
+
 
     while not stop_event.is_set():
         try:

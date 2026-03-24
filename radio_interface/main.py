@@ -1,6 +1,7 @@
 from hardware_process   import HARDWARE_COMMUNICATION
 from transmitt_process  import TRANSMITT_PROCESS
 from recive_process     import RECIVE_PROCESS
+from modules.sound              import SOUND
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,11 +17,16 @@ if __name__ == "__main__":
         recive_process    = RECIVE_PROCESS(rx_q=rx_q)
         bin_tx_q = transmitt_process.get_binary_q()
         bin_rx_q = recive_process.get_binary_q()
+        sound = SOUND(bin_tx_q, bin_rx_q)
+        #sound.record()
+        #sound.play()
 
         while True:
-            while not bin_rx_q.empty():
-                bin_rx_q.get()
-            bin_tx_q.put(np.random.randint(0,2, 100))
+            #while not bin_rx_q.empty():
+                #bin_rx_q.get()
+
+            #bin_tx_q.put(np.random.randint(0,2, 100))
+
             plt.pause(0.1)
 
     except KeyboardInterrupt:
@@ -30,3 +36,4 @@ if __name__ == "__main__":
         transmitt_process.stop()
         recive_process.stop()
         hardware_process.stop()
+        sound.stop_all()
