@@ -1,5 +1,6 @@
 from hardware_process   import HARDWARE_COMMUNICATION
 from transmitt_process  import TRANSMITT_PROCESS
+from Monitor_process    import MONITOR
 from recive_process     import RECIVE_PROCESS
 from modules.sound      import SOUND
 
@@ -9,28 +10,21 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     try:
         print("Starting hardware process")
-        hardware_process = HARDWARE_COMMUNICATION()
-        tx_q = hardware_process.get_tx_queue()
-        rx_q = hardware_process.get_rx_queue()
-        rx_plot_q = hardware_process.get_rx_plot_q() #for ploting or storing raw data
-        transmitt_process = TRANSMITT_PROCESS(tx_q=tx_q) #starts transmitt process and hook it up to transmitt queue on hardware communication
-        recive_process    = RECIVE_PROCESS(rx_q=rx_q)
-        bin_tx_q = transmitt_process.get_binary_q()
-        bin_rx_q = recive_process.get_binary_q()
-        sound = SOUND(bin_tx_q, bin_rx_q)
+        monitor             = MONITOR()
+        hardware_process    = HARDWARE_COMMUNICATION(monitor_q=monitor.get_monitor_q())
+        transmitt_process   = TRANSMITT_PROCESS(tx_q=hardware_process.get_tx_queue()) #starts transmitt process and hook it up to transmitt queue on hardware communication
+        recive_process      = RECIVE_PROCESS(rx_q=hardware_process.get_rx_queue(), monitor_q=monitor.get_monitor_q())
+        sound               = SOUND(transmitt_process.get_binary_q(), recive_process.get_binary_q())
+        
         sound.stream()
         #sound.record()
         #sound.play()
 
-        while True:
-            #while not bin_rx_q.empty():
-                #bin_rx_q.get()
-
-            #bin_tx_q.put(np.random.randint(0,2, 100))
-
-            plt.pause(0.1)
+        monitor.run() #runs the monitor process in the main branch
 
     except KeyboardInterrupt:
+        pass
+    except SystemExit:
         pass
 
     finally:

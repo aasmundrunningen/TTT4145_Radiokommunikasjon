@@ -18,9 +18,10 @@ from modules.syncronisation import SYNCHRONIZATION
 import data_logger
 
 
-def recive_process_loop(rx_q, binary_q, stop_event):
+def recive_process_loop(rx_q, binary_q, monitor_q, stop_event):
     binary_q.cancel_join_thread()
     rx_q.cancel_join_thread()
+    monitor_q.cancel_join_thread()
     signal.signal(signal.SIGINT, signal.SIG_IGN) #ignores the keyboard interrupt
     print("RECIVE PROCESS: started")
 
@@ -43,7 +44,12 @@ def recive_process_loop(rx_q, binary_q, stop_event):
             RC_filt_data                    = filter.rx_filter(course_freq_sync_data)
             detected_start_of_packages      = preamble.detector(old_rc_filt_data, RC_filt_data)
 
-            
+            try:
+                monitor_q.put_nowait(("num_recived_packages", number_of_recived_packages))
+                monitor_q.put_nowait(("num_false_preamble", number_of_false_preamble))
+            except queue.Full:
+                pass
+
             #data handling on detected packages
             for sop in detected_start_of_packages:
                 data_package                = np.concatenate([old_rc_filt_data, RC_filt_data])[sop:sop + (config.general.package_size//2)*config.filter.sps_rx]
@@ -51,6 +57,14 @@ def recive_process_loop(rx_q, binary_q, stop_event):
                 phase_synced_data           = sync.data_driven_phase_sync(downsampled_data)
                 binary_data_with_preamble   = demodulator(phase_synced_data)
                 binary_data, result_code    = preamble.remove_preamble(binary_data_with_preamble)
+
+                try:
+                    monitor_q.put_nowait(("rx data_package", data_package))
+                    monitor_q.put_nowait(("rx downsampled_data", downsampled_data))
+                    monitor_q.put_nowait(("rx phase_synced_data", phase_synced_data))
+                except queue.Full:
+                    pass
+
                 if result_code == 1: #correct preamble detected
                     number_of_recived_packages += 1
                     try:
@@ -69,12 +83,13 @@ def recive_process_loop(rx_q, binary_q, stop_event):
     print("RECIVE PROCESS: stopped")
 
 class RECIVE_PROCESS:
-    def __init__(self, rx_q):
+    def __init__(self, rx_q, monitor_q=multiprocessing.Queue(maxsize=100)):
         self.binary_q = multiprocessing.Queue(maxsize=10)
+        self.monitor_q = monitor_q
         self.rx_q = rx_q
         self.stop_event = multiprocessing.Event()
 
-        self.recive_process = multiprocessing.Process(target=recive_process_loop, args=(self.rx_q, self.binary_q, self.stop_event))
+        self.recive_process = multiprocessing.Process(target=recive_process_loop, args=(self.rx_q, self.binary_q, self.monitor_q, self.stop_event))
         self.recive_process.start()
     
     def get_binary_q(self):

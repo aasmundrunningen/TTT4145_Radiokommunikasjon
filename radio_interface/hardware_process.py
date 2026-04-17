@@ -1,4 +1,5 @@
 import modules.config as config
+import modules.data_logging as data_logging
 import adi
 import time
 import multiprocessing
@@ -9,37 +10,41 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 #Hardware communication, must be seperate to make it work with how processes are spawned
-def hardware_communication_loop(ip, rx_q, tx_q, rx_plot_q, stop_event):
+def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
     rx_q.cancel_join_thread() #Ques sending to main program need to not hang, otherwise it causes issues
-    rx_plot_q.cancel_join_thread()
+    monitor_q.cancel_join_thread()
     
     signal.signal(signal.SIGINT, signal.SIG_IGN) #ignores the keyboard interrupt
     print("HARDWARE COMMUNICATION LOOP: started process")
     print(f"HARDWARE COMMUNICATION LOOP: ip address {ip}")
     
+    
+    data_logger = data_logging.HighSpeedLogger()
+
     sample_rate = config.general.symboles_per_second*config.filter.sps_rx
     print(f"Sampling rate {sample_rate} samples/s")
     print(f"TX lo: {int(config.adalm_pluto.tx_lo_freq)}")
 
     #setup of ADALM PLUTO
-    try:
-        sdr                             =  adi.Pluto(ip)
-    except Exception as e:
-        if "No device found" in str(e):
-            print(f"[ERROR]: HARDWARE COMMUNICATION LOOP: sdr not found, {ip}")
-            print(f"HARDWARE COMMUNICATION LOOP: stops loop")
-            return
-        else:
-            raise e
-    sdr.sample_rate                 = sample_rate
-    sdr.tx_lo                       = int(config.adalm_pluto.tx_lo_freq)
-    sdr.tx_hardwaregain_chan0       = int(config.adalm_pluto.tx_gain)
+    if not config.general.run_from_file:
+        try:
+            sdr                             =  adi.Pluto(ip)
+        except Exception as e:
+            if "No device found" in str(e):
+                print(f"[ERROR]: HARDWARE COMMUNICATION LOOP: sdr not found, {ip}")
+                print(f"HARDWARE COMMUNICATION LOOP: stops loop")
+                return
+            else:
+                raise e
+        sdr.sample_rate                 = sample_rate
+        sdr.tx_lo                       = int(config.adalm_pluto.tx_lo_freq)
+        sdr.tx_hardwaregain_chan0       = int(config.adalm_pluto.tx_gain)
 
-    sdr.gain_control_mode_chan0     = "manual"
-    sdr.rx_lo                       = int(config.adalm_pluto.rx_lo_freq)
-    sdr.rx_rf_bandwidth             = int(sdr.sample_rate*0.8) #antialiasing
-    sdr.rx_buffer_size              = int(config.adalm_pluto.rx_buffer_size)
-    sdr.rx_hardwaregain_chan0       = int(config.adalm_pluto.rx_gain)
+        sdr.gain_control_mode_chan0     = "manual"
+        sdr.rx_lo                       = int(config.adalm_pluto.rx_lo_freq)
+        sdr.rx_rf_bandwidth             = int(sdr.sample_rate*0.8) #antialiasing
+        sdr.rx_buffer_size              = int(config.adalm_pluto.rx_buffer_size)
+        sdr.rx_hardwaregain_chan0       = int(config.adalm_pluto.rx_gain)
 
 
     time_requirment = config.adalm_pluto.rx_buffer_size / sample_rate
@@ -52,7 +57,13 @@ def hardware_communication_loop(ip, rx_q, tx_q, rx_plot_q, stop_event):
         if time.perf_counter() - last_timestamp > time_requirment:
             to_slow_loop_counter += 1
 
-        rx_data = sdr.rx()/2048 #makes it normalized to +-1
+        
+        if config.general.run_from_file:
+            rx_data = data_logger.get_readback_data()
+        else:
+            rx_data = sdr.rx()/2048 #makes it normalized to +-1
+            data_logger.log(rx_data.astype(np.complex64))
+
         last_timestamp = time.perf_counter()
 
         try:
@@ -63,15 +74,15 @@ def hardware_communication_loop(ip, rx_q, tx_q, rx_plot_q, stop_event):
             lost_rx_raw_data_packages += 1
         
         try:
-            rx_plot_q.put_nowait(rx_data)
+            monitor_q.put_nowait(("rx_raw_data", rx_data))
         except queue.Full:
-            rx_plot_q.get()
-            rx_plot_q.put_nowait(rx_data)
-            pass
+            monitor_q.get()
+            monitor_q.put_nowait(("rx_raw_data", rx_data))
 
         try:
             tx_data = tx_q.get_nowait()
-            sdr.tx(tx_data*(2**14)) #scales TX data
+            if not config.general.run_from_file:
+                sdr.tx(tx_data*(2**14)) #scales TX data
         except queue.Empty:
             pass
     
@@ -83,22 +94,22 @@ def hardware_communication_loop(ip, rx_q, tx_q, rx_plot_q, stop_event):
 
 #class for interacting with the SDR
 class HARDWARE_COMMUNICATION(): 
-    def __init__(self, ip=None):
+    def __init__(self, ip=None, monitor_q=multiprocessing.Queue(maxsize=100)):
         if ip == None:
             ip = config.adalm_pluto.ip
         
         print(ip)
 
         self.rx_q = multiprocessing.Queue(maxsize=10)
-        self.rx_plot_q = multiprocessing.Queue(maxsize=100) #for plotting of recived power
+        self.monitor_q = monitor_q #for plotting of recived power
         self.tx_q = multiprocessing.Queue(maxsize=10)
         self.stop_event = multiprocessing.Event()
         
-        self.hardware_process = multiprocessing.Process(target=hardware_communication_loop, args=(ip, self.rx_q, self.tx_q, self.rx_plot_q, self.stop_event), daemon=True)
+        self.hardware_process = multiprocessing.Process(target=hardware_communication_loop, args=(ip, self.rx_q, self.tx_q, self.monitor_q, self.stop_event), daemon=True)
         self.hardware_process.start()
 
-    def get_rx_plot_q(self):
-        return self.rx_plot_q
+    def get_monitor_q(self):
+        return self.monitor_q
 
     def enable_rx_power_plot(self):
         self.rx_fig, self.rx_ax = plt.subplots()
@@ -114,8 +125,8 @@ class HARDWARE_COMMUNICATION():
 
     def _update_rx_power_plot(self, frame):
         try:
-            while not self.rx_plot_q.empty():
-                rx_data = self.rx_plot_q.get_nowait()
+            while not self.monitor_q.empty():
+                rx_data = self.monitor_q.get_nowait()
                 pow = 20*np.log10(np.sum(np.abs(rx_data)))
                 self.power = np.concatenate((self.power[1:], [pow]))
             x = np.arange(np.size(self.power))

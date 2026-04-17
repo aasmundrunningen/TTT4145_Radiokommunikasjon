@@ -6,17 +6,20 @@ from types import SimpleNamespace
 general = SimpleNamespace(
     symboles_per_second = 80000, 
     preamble = 0xB30FDD4, 
-    package_size = 148,
-    modulation_scheme = "QPSK"
+    package_size = 148, #probably in bits?
+    modulation_scheme = "QPSK",
+    enable_logging = False,
+    run_from_file = True,
+    data_file_index = "000"
 )
 
 # --- ADALM Pluto Hardware ---
 adalm_pluto = SimpleNamespace(
     ip = "ip:192.168.2.1", #ips is 192.168.2.1 and 192.168.3.1
-    rx_recive_freq = 910e6,
-    rx_lo_freq = 909.8e6, # Nyquist limit is 320kHz
+    rx_recive_freq = 920e6,
+    rx_lo_freq = 919.8e6, # Nyquist limit is 320kHz
     tx_lo_freq = 920e6,
-    rx_gain = 50,          # Range: 0 to 73dB, for 2m distance does 50dB seem to give around 50% of max power
+    rx_gain = 70,          # Range: 0 to 73dB, for 2m distance does 50dB seem to give around 50% of max power
     tx_gain = 0,          # Range: -90 to 0dB
     rx_buffer_size = 2**13,    #Tilsvarer 12.8 ms pr. buffer 
     max_freq_offset_ppm = 25
