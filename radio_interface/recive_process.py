@@ -66,6 +66,7 @@ def recive_process_loop(rx_q, hardware_process_feedback_q, binary_q, monitor_q, 
                     monitor_q.put_nowait(("rx data_package", data_package))
                     monitor_q.put_nowait(("rx downsampled_data", downsampled_data))
                     monitor_q.put_nowait(("rx phase_synced_data", phase_synced_data))
+                    monitor_q.put_nowait(("SOP", sop))
                 except queue.Full:
                     pass
 
@@ -75,8 +76,9 @@ def recive_process_loop(rx_q, hardware_process_feedback_q, binary_q, monitor_q, 
                         time_of_rx_package = rx_timestamp - (config.adalm_pluto.rx_buffer_size - sop) / (config.general.symboles_per_second*config.filter.sps_rx)
                         hardware_process_feedback_q.put_nowait(time_of_rx_package)
                     except queue.Full:
-                        hardware_process_feedback_q.get()
-                        hardware_process_feedback_q.put(rx_timestamp)
+                        pass
+                        #hardware_process_feedback_q.get()
+                        #hardware_process_feedback_q.put(rx_timestamp)
 
                     try:
                         binary_q.put(binary_data, timeout=0.1)

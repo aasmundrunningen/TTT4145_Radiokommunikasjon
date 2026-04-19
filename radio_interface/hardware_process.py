@@ -113,7 +113,7 @@ def hardware_communication_loop(ip, rx_q, rx_feedback_q, tx_q, monitor_q, stop_e
                 t = last_recive_package_timestamp
                 last_recive_package_timestamp = rx_feedback_q.get_nowait()
                 slave_recive_lock = True
-                start_point = last_recive_package_timestamp + config.TDMA.time_guard+config.TDMA.time_tx #offsetting slave start half of time from master
+                start_point = last_recive_package_timestamp + config.TDMA.time_guard+config.TDMA.time_tx+0.001 #offsetting slave start half of time from master
             except queue.Empty:
                 if last_recive_package_timestamp == None or (time.perf_counter() - last_recive_package_timestamp > 1):
                     slave_recive_lock = False

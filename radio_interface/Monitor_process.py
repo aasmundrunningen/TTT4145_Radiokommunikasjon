@@ -75,6 +75,17 @@ class MONITOR:
         self.transmitt_rate_data = np.zeros(60)
         self.transmitted_packages = 0
         self.transmitt_rate_time = time.time()
+        self.transmitt_rate_plot.setYRange(0,60)
+
+        #SOP
+        self.SOP_plot = self.view.addPlot(row=2, col=3, title="Start of package estimation")
+        self.SOP_curve = self.SOP_plot.plot(pen='b')
+        self.SOP_data = np.zeros(60)
+        self.transmitted_packages = 0
+        self.SOP_time = time.time()
+        self.SOP_plot.setYRange(0,1)
+
+
 
         # 4. Setup the Update Timer
         # We update the UI at 60Hz (approx 16ms), even if data comes in at 1000Hz.
@@ -138,7 +149,10 @@ class MONITOR:
                             self.transmitt_rate_data[:-1] = self.transmitt_rate_data[1:]
                             self.transmitt_rate_data[-1] = transmitt_rate
                             self.transmitt_rate_curve.setData(self.transmitt_rate_data)
-
+                    case "SOP":
+                        self.SOP_data[:-1] = self.SOP_data[1:]
+                        self.SOP_data[-1] = data/config.adalm_pluto.rx_buffer_size
+                        self.SOP_curve.setData(self.SOP_data)
 
             except queue.Empty:
                 break
