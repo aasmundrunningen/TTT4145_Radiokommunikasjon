@@ -6,11 +6,18 @@ from types import SimpleNamespace
 general = SimpleNamespace(
     symboles_per_second = 80000, 
     preamble = 0xB30FDD4, 
-    package_size = 148, #probably in bits?
+    package_size = 148, #probably in bits, gives sending_time=package_size/(2*symboles_per_second)=0.925mS
     modulation_scheme = "QPSK",
     enable_logging = False,
     run_from_file = False,
     data_file_index = "000"
+)
+
+TDMA = SimpleNamespace(
+    time_periode = 0.018, #18ms total time
+    time_tx = 0.002, #2ms alocated for transmitt, transmittion takes 0.925mS
+    time_guard = 0.002, #2ms, guard between tx and rx
+    time_rx = 0.012 #12ms for reciving
 )
 
 # --- ADALM Pluto Hardware ---
@@ -21,7 +28,7 @@ adalm_pluto = SimpleNamespace(
     tx_lo_freq = 920e6,
     rx_gain = 70,          # Range: 0 to 73dB, for 2m distance does 50dB seem to give around 50% of max power
     tx_gain = 0,          # Range: -90 to 0dB
-    rx_buffer_size = 2**12,    #2**13 Tilsvarer 12.8 ms pr. buffer 
+    rx_buffer_size = 10*512, #10*512=8ms, multiple of 512 to use full USB 2 buffers, #2**13,    #2**13 Tilsvarer 12.8 ms pr. buffer 
     max_freq_offset_ppm = 25
 )
 

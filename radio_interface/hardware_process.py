@@ -10,9 +10,10 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 #Hardware communication, must be seperate to make it work with how processes are spawned
-def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
+def hardware_communication_loop(ip, rx_q, rx_feedback_q, tx_q, monitor_q, stop_event, master):
     rx_q.cancel_join_thread() #Ques sending to main program need to not hang, otherwise it causes issues
     monitor_q.cancel_join_thread()
+    rx_feedback_q.cancel_join_thread()
     
     signal.signal(signal.SIGINT, signal.SIG_IGN) #ignores the keyboard interrupt
     print("HARDWARE COMMUNICATION LOOP: started process")
@@ -54,50 +55,80 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
     to_slow_loop_counter = 0
     last_timestamp = time.perf_counter()
     lost_rx_raw_data_packages = 0
+    last_recive_package_timestamp = None
+    
+    lost_recive_window = 0
+    start_point = time.perf_counter()
+    rx_power = 0
+    next_start = time.perf_counter()
     while not stop_event.is_set():
-        #timing to check that the loop runs fast enough
-        if time.perf_counter() - last_timestamp > time_requirment:
-            to_slow_loop_counter += 1
-
-        rx_power = float(sdr._ctrl.find_channel('voltage0').attrs['rssi'].value.split()[0])
-        average_rx_power = average_rx_power*0.99 + rx_power*0.01
-
-        try:
-            if rx_power < average_rx_power*20: #Listen before transmittion
+        if time.perf_counter() > next_start + config.TDMA.time_periode:
+            print(time.perf_counter() - next_start + config.TDMA.time_periode)
+        #calculating new start time
+        next_start = start_point + np.ceil((time.perf_counter() - start_point)/config.TDMA.time_periode)*config.TDMA.time_periode
+        #Transmittion
+        while time.perf_counter() < next_start: #busy wait for transmitt window
+            pass
+        #check if allowed to transmitt, either master or slave with a recive the last second
+        if master or (last_recive_package_timestamp != None and time.perf_counter() - last_recive_package_timestamp < 1):
+            try:
                 tx_data = tx_q.get_nowait()
                 if not config.general.run_from_file:
-                    sdr.rx_destroy_buffer() #destroies buffer to stop reciving
                     sdr.tx(tx_data*(2**14)) #scales TX data
-                    time.sleep(len(tx_data) / sdr.sample_rate) #waiting for transmittion to finish and guard interval to settel oscialtor
+                    
+                    #busy waiting for transmittion to finish
+                    t = time.perf_counter() + len(tx_data) / sdr.sample_rate
+                    while t > time.perf_counter():
+                        pass
+                    
                     transmitted_packages = transmitted_packages + 1
-        except queue.Empty:
+            except queue.Empty:
+                pass              
+        #Reciving
+        while time.perf_counter() < next_start + config.TDMA.time_tx + config.TDMA.time_guard: #waiting for recive window
             pass
-
-
-
-
         if config.general.run_from_file:
             rx_data = data_logger.get_readback_data()
         else:
-            rx_data = sdr.rx()/2048 #makes it normalized to +-1
-            data_logger.log(rx_data.astype(np.complex64))
-
-        last_timestamp = time.perf_counter()
-
+            sdr.rx()#removes old data
+            rx_data = sdr.rx() #makes it normalized to +-1
+            #data_logger.log(rx_data.astype(np.complex64))
         try:
-            rx_q.put_nowait(rx_data)
+            rx_q.put_nowait((rx_data, last_timestamp))
         except queue.Full:
             rx_q.get()
-            rx_q.put_nowait(rx_data)
+            rx_q.put_nowait((rx_data, last_timestamp))
             lost_rx_raw_data_packages += 1
+        rx_power = np.sum(np.abs(rx_data[-10:]))
+
+        #other stuff, doing while in guard interval
 
 
-
-
+        #estimation of slave start point
+        if not master: 
+            try:
+                t = last_recive_package_timestamp
+                last_recive_package_timestamp = rx_feedback_q.get_nowait()
+                if t == None and last_recive_package_timestamp != None:
+                    print("Got a package lock, starting transmittion!")
+                start_point = last_recive_package_timestamp + config.TDMA.time_periode/2 #offsetting slave start half of time from master
+            except queue.Empty:
+                pass
+            if last_recive_package_timestamp == None or (time.perf_counter() - last_recive_package_timestamp > 1):
+                start_point = start_point - np.random.rand()*0.001 #randomly moves start point to search for package if no sync has been made
+                #ensuring transmitt queue does not fill up
+                try:
+                    tx_q.get_nowait()
+                except queue.Empty:
+                    pass
+        #---------------Monitoring--------------------------
+        #rx_power = float(sdr._ctrl.find_channel('voltage0').attrs['rssi'].value.split()[0])
+        #average_rx_power = average_rx_power*0.99 + rx_power*0.01
+        
         try:
-            monitor_q.put_nowait(("rx_raw_data", rx_data))
+            #monitor_q.put_nowait(("rx_raw_data", rx_data)) #probably to slow
             monitor_q.put_nowait(("rx_power", rx_power))
-            monitor_q.put_nowait(("rx_average_power", average_rx_power))
+            #monitor_q.put_nowait(("rx_average_power", average_rx_power))
             monitor_q.put_nowait(("transmitted pacakges", transmitted_packages))
         except queue.Full:
             pass
@@ -111,7 +142,7 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
 
 #class for interacting with the SDR
 class HARDWARE_COMMUNICATION(): 
-    def __init__(self, ip=None, monitor_q=multiprocessing.Queue(maxsize=100)):
+    def __init__(self, ip=None, monitor_q=multiprocessing.Queue(maxsize=100), master=True):
         if ip == None:
             ip = config.adalm_pluto.ip
         
@@ -121,8 +152,9 @@ class HARDWARE_COMMUNICATION():
         self.monitor_q = monitor_q #for plotting of recived power
         self.tx_q = multiprocessing.Queue(maxsize=10)
         self.stop_event = multiprocessing.Event()
+        self.rx_feedback_q = multiprocessing.Queue(maxsize=1)
         
-        self.hardware_process = multiprocessing.Process(target=hardware_communication_loop, args=(ip, self.rx_q, self.tx_q, self.monitor_q, self.stop_event), daemon=True)
+        self.hardware_process = multiprocessing.Process(target=hardware_communication_loop, args=(ip, self.rx_q, self.rx_feedback_q, self.tx_q, self.monitor_q, self.stop_event, master), daemon=True)
         self.hardware_process.start()
 
     def get_monitor_q(self):
@@ -130,6 +162,10 @@ class HARDWARE_COMMUNICATION():
 
     def get_rx_queue(self):
         return self.rx_q
+    
+    def get_rx_feedback_queue(self):
+        return self.rx_feedback_q
+
     
     def get_tx_queue(self):
         return self.tx_q

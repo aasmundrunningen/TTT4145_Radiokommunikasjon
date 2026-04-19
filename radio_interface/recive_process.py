@@ -18,9 +18,10 @@ from modules.syncronisation import SYNCHRONIZATION
 import data_logger
 
 
-def recive_process_loop(rx_q, binary_q, monitor_q, stop_event):
+def recive_process_loop(rx_q, hardware_process_feedback_q, binary_q, monitor_q, stop_event):
     binary_q.cancel_join_thread()
     rx_q.cancel_join_thread()
+    hardware_process_feedback_q.cancel_join_thread()
     monitor_q.cancel_join_thread()
     signal.signal(signal.SIGINT, signal.SIG_IGN) #ignores the keyboard interrupt
     print("RECIVE PROCESS: started")
@@ -36,9 +37,9 @@ def recive_process_loop(rx_q, binary_q, monitor_q, stop_event):
 
     while not stop_event.is_set():
         try:
-            rx_data = rx_q.get(timeout=0.5)
+            rx_data, rx_timestamp = rx_q.get(timeout=0.5)
             #data handling of recived data
-            bandpassed_data                 = filter.rx_bandpass_filter(rx_data)
+            bandpassed_data                 = filter.rx_bandpass_filter(rx_data/2048) #normalisation and filtering
             course_freq_sync_data           = sync.course_freq_sync(bandpassed_data)
             old_rc_filt_data                = RC_filt_data
             RC_filt_data                    = filter.rx_filter(course_freq_sync_data)
@@ -53,6 +54,9 @@ def recive_process_loop(rx_q, binary_q, monitor_q, stop_event):
             #data handling on detected packages
             for sop in detected_start_of_packages:
                 data_package                = np.concatenate([old_rc_filt_data, RC_filt_data])[sop:sop + (config.general.package_size//2)*config.filter.sps_rx]
+                #if len(RC_filt_data) < sop + (config.general.package_size//2)*config.filter.sps_rx:
+                #    continue #total package is not in data_buffer
+                #data_package                = RC_filt_data[sop:sop + (config.general.package_size//2)*config.filter.sps_rx]
                 downsampled_data            = sync.timing_sync_power_selector(data_package)
                 phase_synced_data           = sync.data_driven_phase_sync(downsampled_data)
                 binary_data_with_preamble   = demodulator(phase_synced_data)
@@ -67,6 +71,13 @@ def recive_process_loop(rx_q, binary_q, monitor_q, stop_event):
 
                 if result_code == 1: #correct preamble detected
                     number_of_recived_packages += 1
+                    try:
+                        time_of_rx_package = rx_timestamp - (config.adalm_pluto.rx_buffer_size - sop) / (config.general.symboles_per_second*config.filter.sps_rx)
+                        hardware_process_feedback_q.put_nowait(time_of_rx_package)
+                    except queue.Full:
+                        hardware_process_feedback_q.get()
+                        hardware_process_feedback_q.put(rx_timestamp)
+
                     try:
                         binary_q.put(binary_data, timeout=0.1)
                     except queue.Full:
@@ -83,13 +94,15 @@ def recive_process_loop(rx_q, binary_q, monitor_q, stop_event):
     print("RECIVE PROCESS: stopped")
 
 class RECIVE_PROCESS:
-    def __init__(self, rx_q, monitor_q=multiprocessing.Queue(maxsize=100)):
+    def __init__(self, rx_q, hardware_process_feedback_q, monitor_q=multiprocessing.Queue(maxsize=100)):
         self.binary_q = multiprocessing.Queue(maxsize=10)
         self.monitor_q = monitor_q
         self.rx_q = rx_q
+        self.hardware_process_feedback_q = hardware_process_feedback_q
         self.stop_event = multiprocessing.Event()
+        
 
-        self.recive_process = multiprocessing.Process(target=recive_process_loop, args=(self.rx_q, self.binary_q, self.monitor_q, self.stop_event))
+        self.recive_process = multiprocessing.Process(target=recive_process_loop, args=(self.rx_q, self.hardware_process_feedback_q, self.binary_q, self.monitor_q, self.stop_event))
         self.recive_process.start()
     
     def get_binary_q(self):

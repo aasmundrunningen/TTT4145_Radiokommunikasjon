@@ -40,7 +40,7 @@ class PREAMBLE():
 
     def detector(self, data, new_data):
         conc_data = np.concatenate((data, new_data[:config.filter.sps_rx*config.filter.span])) #ensures that it handles preambles in between packages
-        #data_power = np.sqrt(np.sum(np.pow(np.abs(data), 2)) * np.sum(np.pow(np.abs(self.reference_signal),2)))
+        #conc_data = new_data
         noise_floor = np.median(np.abs(conc_data))
         cross_cor = np.abs(sp.signal.correlate(conc_data, self.reference_signal, mode="valid"))
         
