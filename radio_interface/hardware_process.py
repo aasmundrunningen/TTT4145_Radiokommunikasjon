@@ -20,10 +20,12 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
     
     
     data_logger = data_logging.HighSpeedLogger()
-
+    average_rx_power = 0
     sample_rate = config.general.symboles_per_second*config.filter.sps_rx
     print(f"Sampling rate {sample_rate} samples/s")
     print(f"TX lo: {int(config.adalm_pluto.tx_lo_freq)}")
+
+    transmitted_packages = 0
 
     #setup of ADALM PLUTO
     if not config.general.run_from_file:
@@ -57,7 +59,23 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
         if time.perf_counter() - last_timestamp > time_requirment:
             to_slow_loop_counter += 1
 
-        
+        rx_power = float(sdr._ctrl.find_channel('voltage0').attrs['rssi'].value.split()[0])
+        average_rx_power = average_rx_power*0.99 + rx_power*0.01
+
+        try:
+            if rx_power < average_rx_power*20: #Listen before transmittion
+                tx_data = tx_q.get_nowait()
+                if not config.general.run_from_file:
+                    sdr.rx_destroy_buffer() #destroies buffer to stop reciving
+                    sdr.tx(tx_data*(2**14)) #scales TX data
+                    time.sleep(len(tx_data) / sdr.sample_rate) #waiting for transmittion to finish and guard interval to settel oscialtor
+                    transmitted_packages = transmitted_packages + 1
+        except queue.Empty:
+            pass
+
+
+
+
         if config.general.run_from_file:
             rx_data = data_logger.get_readback_data()
         else:
@@ -72,19 +90,18 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
             rx_q.get()
             rx_q.put_nowait(rx_data)
             lost_rx_raw_data_packages += 1
-        
-        try:
-            monitor_q.put_nowait(("rx_raw_data", rx_data))
-        except queue.Full:
-            monitor_q.get()
-            monitor_q.put_nowait(("rx_raw_data", rx_data))
+
+
+
 
         try:
-            tx_data = tx_q.get_nowait()
-            if not config.general.run_from_file:
-                sdr.tx(tx_data*(2**14)) #scales TX data
-        except queue.Empty:
+            monitor_q.put_nowait(("rx_raw_data", rx_data))
+            monitor_q.put_nowait(("rx_power", rx_power))
+            monitor_q.put_nowait(("rx_average_power", average_rx_power))
+            monitor_q.put_nowait(("transmitted pacakges", transmitted_packages))
+        except queue.Full:
             pass
+
     
 
     del sdr
@@ -110,31 +127,6 @@ class HARDWARE_COMMUNICATION():
 
     def get_monitor_q(self):
         return self.monitor_q
-
-    def enable_rx_power_plot(self):
-        self.rx_fig, self.rx_ax = plt.subplots()
-        N = 100 #number of points
-        self.rx_ax.set_xlim(0,N)
-        self.rx_line, = self.rx_ax.plot([], [])
-        self.rx_ax.set_xlabel("Time [packages]")
-        self.rx_ax.set_ylabel("Recived power [dB]")
-        self.rx_ax.set_title("Recived power")
-        self.power = np.zeros(N)
-        self.ani = FuncAnimation(self.rx_fig, self._update_rx_power_plot, cache_frame_data=False)
-        plt.show(block=False) # block=False lets the script continue
-
-    def _update_rx_power_plot(self, frame):
-        try:
-            while not self.monitor_q.empty():
-                rx_data = self.monitor_q.get_nowait()
-                pow = 20*np.log10(np.sum(np.abs(rx_data)))
-                self.power = np.concatenate((self.power[1:], [pow]))
-            x = np.arange(np.size(self.power))
-            self.rx_line.set_data(x, self.power)
-            self.rx_ax.set_ylim(100,200)
-            return self.rx_line
-        except queue.Empty:
-            return self.rx_line
 
     def get_rx_queue(self):
         return self.rx_q

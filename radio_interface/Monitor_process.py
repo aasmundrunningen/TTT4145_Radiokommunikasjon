@@ -14,14 +14,14 @@ def test_data_producer(m_q):
         time.sleep(0.1)
 
 class MONITOR:
-    def __init__(self):
+    def __init__(self, ip=0):
         self.monitor_q = multiprocessing.Queue(maxsize=100) #recive data as touple ("header", data_np_array)
 
         # 1. Standard PyQt Setup
         pg.setConfigOption('background', 'w')
         pg.setConfigOption('foreground', 'k') # Sets axes/text to black
         self.app = QtWidgets.QApplication(sys.argv)
-        self.view = pg.GraphicsLayoutWidget(show=True, title="Efficient Live Plotting")
+        self.view = pg.GraphicsLayoutWidget(show=True, title=f"Live ploting, ip = {ip}")
         self.view.resize(800, 400)
 
 
@@ -30,8 +30,11 @@ class MONITOR:
         self.rx_power_plot = self.view.addPlot(row=0, col=0, title="Recived power")
         self.rx_power_plot.setLabel('bottom', "Time", color='#FFFFFF', size='12pt')
         self.rx_power_plot.setLabel('left', "Amplitude")
-        self.rx_power_curve = self.rx_power_plot.plot(pen='b') #pen is collor
+        self.rx_power_curve = self.rx_power_plot.plot(pen='b', name="Rx power") #pen is collor
+        self.average_rx_power_curve = self.rx_power_plot.plot(pen='b', name="Rx average power") #pen is collor
+        self.rx_power_plot.addLegend()
         self.rx_power_data = np.zeros(100)
+        self.average_rx_power_data = np.zeros(100)
 
         #eye diagram
         self.eye_plot = self.view.addPlot(row=0, col=1, title="Absolute Eye diagram")
@@ -66,6 +69,13 @@ class MONITOR:
         self.recive_rate_plot.setLabel('left', "Rate [packages/s]")
         self.recive_rate_plot.setYRange(0, 100)
 
+        #transmitt rate plot
+        self.transmitt_rate_plot = self.view.addPlot(row=1, col=3, title="Transmitt rate")
+        self.transmitt_rate_curve = self.transmitt_rate_plot.plot(pen='b')
+        self.transmitt_rate_data = np.zeros(60)
+        self.transmitted_packages = 0
+        self.transmitt_rate_time = time.time()
+
         # 4. Setup the Update Timer
         # We update the UI at 60Hz (approx 16ms), even if data comes in at 1000Hz.
         self.timer = QtCore.QTimer()
@@ -83,10 +93,14 @@ class MONITOR:
             try:
                 header, data = self.monitor_q.get_nowait()
                 match header: 
-                    case "rx_raw_data":
+                    case "rx_power":
                         self.rx_power_data[:-1] = self.rx_power_data[1:]
-                        self.rx_power_data[-1] = np.sum(np.pow(np.abs(data),2))
+                        self.rx_power_data[-1] = data
                         self.rx_power_curve.setData(self.rx_power_data)
+                    case "rx_average_power":
+                        self.average_rx_power_data[:-1] = self.average_rx_power_data[1:]
+                        self.average_rx_power_data[-1] = data
+                        self.average_rx_power_curve.setData(self.average_rx_power_data)                        
                     case "rx data_package": #eye diagram
                         data = np.concatenate((np.full(np.floor(config.filter.sps_rx/2).astype(int), np.nan), np.abs(data), np.full(np.ceil(config.filter.sps_rx/2).astype(int), np.nan)))
                         data_split = data.reshape(-1, config.filter.sps_rx)
@@ -116,7 +130,14 @@ class MONITOR:
                             self.wrong_preamble_rate[:-1] = self.wrong_preamble_rate[1:]
                             self.wrong_preamble_rate[-1] = wrong_preamble_rate
                             self.wrong_preamble_rate_curve.setData(self.wrong_preamble_rate)
-                        pass
+                    case "transmitted pacakges":
+                        if 1 < time.time() - self.transmitt_rate_time:
+                            transmitt_rate = (data - self.transmitted_packages) / (time.time() - self.transmitt_rate_time)
+                            self.transmitted_packages = data
+                            self.transmitt_rate_time = time.time()
+                            self.transmitt_rate_data[:-1] = self.transmitt_rate_data[1:]
+                            self.transmitt_rate_data[-1] = transmitt_rate
+                            self.transmitt_rate_curve.setData(self.transmitt_rate_data)
 
 
             except queue.Empty:

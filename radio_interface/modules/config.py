@@ -9,7 +9,7 @@ general = SimpleNamespace(
     package_size = 148, #probably in bits?
     modulation_scheme = "QPSK",
     enable_logging = False,
-    run_from_file = True,
+    run_from_file = False,
     data_file_index = "000"
 )
 
@@ -21,7 +21,7 @@ adalm_pluto = SimpleNamespace(
     tx_lo_freq = 920e6,
     rx_gain = 70,          # Range: 0 to 73dB, for 2m distance does 50dB seem to give around 50% of max power
     tx_gain = 0,          # Range: -90 to 0dB
-    rx_buffer_size = 2**13,    #Tilsvarer 12.8 ms pr. buffer 
+    rx_buffer_size = 2**12,    #2**13 Tilsvarer 12.8 ms pr. buffer 
     max_freq_offset_ppm = 25
 )
 
