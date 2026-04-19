@@ -60,6 +60,8 @@ def hardware_communication_loop(ip, rx_q, rx_feedback_q, tx_q, monitor_q, stop_e
     lost_recive_window = 0
     start_point = time.perf_counter()
     rx_power = 0
+    slave_recive_lock = False
+    last_slave_recive_lock = False
     next_start = time.perf_counter()
     while not stop_event.is_set():
         if time.perf_counter() > next_start + config.TDMA.time_periode:
@@ -70,7 +72,7 @@ def hardware_communication_loop(ip, rx_q, rx_feedback_q, tx_q, monitor_q, stop_e
         while time.perf_counter() < next_start: #busy wait for transmitt window
             pass
         #check if allowed to transmitt, either master or slave with a recive the last second
-        if master or (last_recive_package_timestamp != None and time.perf_counter() - last_recive_package_timestamp < 1):
+        if master or slave_recive_lock:
             try:
                 tx_data = tx_q.get_nowait()
                 if not config.general.run_from_file:
@@ -105,22 +107,22 @@ def hardware_communication_loop(ip, rx_q, rx_feedback_q, tx_q, monitor_q, stop_e
 
 
         #estimation of slave start point
+        last_slave_recive_lock = slave_recive_lock
         if not master: 
             try:
                 t = last_recive_package_timestamp
                 last_recive_package_timestamp = rx_feedback_q.get_nowait()
-                if t == None and last_recive_package_timestamp != None:
-                    print("Got a package lock, starting transmittion!")
-                start_point = last_recive_package_timestamp + config.TDMA.time_periode/2 #offsetting slave start half of time from master
+                slave_recive_lock = True
+                start_point = last_recive_package_timestamp + config.TDMA.time_guard+config.TDMA.time_tx #offsetting slave start half of time from master
             except queue.Empty:
-                pass
-            if last_recive_package_timestamp == None or (time.perf_counter() - last_recive_package_timestamp > 1):
-                start_point = start_point - np.random.rand()*0.001 #randomly moves start point to search for package if no sync has been made
-                #ensuring transmitt queue does not fill up
-                try:
-                    tx_q.get_nowait()
-                except queue.Empty:
-                    pass
+                if last_recive_package_timestamp == None or (time.perf_counter() - last_recive_package_timestamp > 1):
+                    slave_recive_lock = False
+                    start_point = start_point - np.random.rand()*0.001 #randomly moves start point to search for package if no sync has been made
+                    #ensuring transmitt queue does not fill up
+                    try:
+                        tx_q.get_nowait()
+                    except queue.Empty:
+                        pass
         #---------------Monitoring--------------------------
         #rx_power = float(sdr._ctrl.find_channel('voltage0').attrs['rssi'].value.split()[0])
         #average_rx_power = average_rx_power*0.99 + rx_power*0.01
