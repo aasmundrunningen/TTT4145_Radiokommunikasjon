@@ -27,7 +27,6 @@ if __name__ == "__main__":
     print(f"Transmitting {transmitt}, Reciving {recive}")
 
     try:
-        print("Starting hardware process")
         monitor             = MONITOR(ip=ip)
         hardware_process    = HARDWARE_COMMUNICATION(monitor_q=monitor.get_monitor_q(), ip=ip)
         transmitt_process   = TRANSMITT_PROCESS(tx_q=hardware_process.get_tx_queue()) #starts transmitt process and hook it up to transmitt queue on hardware communication

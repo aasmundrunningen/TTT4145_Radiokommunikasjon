@@ -24,7 +24,6 @@ class PREAMBLE():
         self.old_data = np.zeros(config.adalm_pluto.rx_buffer_size) #old data, used to look for preamble
 
         self.min_distance_between_peaks = config.general.package_size*config.filter.sps_rx*2
-        print("min distance between peaks: {}".format(self.min_distance_between_peaks))
 
 
         self.calibration_counter = 0 #ensures calibration before reporting any peaks. Is used to stabilise noise floor estimate
@@ -33,7 +32,6 @@ class PREAMBLE():
         #for plotting of correlation
         self.correlation_plot_queue = queue.Queue(maxsize=1) #Queue size of 1 to remove backlog
         self.ylim_plot = 0
-        print(f"peak to start of signal {self.peak_to_start_of_signal}")
 
     def get_binary_preamble(self):
         return self.preamble

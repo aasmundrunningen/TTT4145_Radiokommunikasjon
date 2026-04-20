@@ -15,15 +15,12 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
     monitor_q.cancel_join_thread()
     
     signal.signal(signal.SIGINT, signal.SIG_IGN) #ignores the keyboard interrupt
-    print("HARDWARE COMMUNICATION LOOP: started process")
-    print(f"HARDWARE COMMUNICATION LOOP: ip address {ip}")
+    print("HARDWARE PROCESS: started process")
     
     
     data_logger = data_logging.HighSpeedLogger()
     average_rx_power = 0
     sample_rate = config.general.symboles_per_second*config.filter.sps_rx
-    print(f"Sampling rate {sample_rate} samples/s")
-    print(f"TX lo: {int(config.adalm_pluto.tx_lo_freq)}")
 
     transmitted_packages = 0
 
@@ -33,8 +30,8 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
             sdr                             =  adi.Pluto(ip)
         except Exception as e:
             if "No device found" in str(e):
-                print(f"[ERROR]: HARDWARE COMMUNICATION LOOP: sdr not found, {ip}")
-                print(f"HARDWARE COMMUNICATION LOOP: stops loop")
+                print(f"[ERROR]: HARDWARE PROCESS: sdr not found, {ip}")
+                print(f"HARDWARE PROCESS: stops loop")
                 return
             else:
                 raise e
@@ -50,7 +47,7 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
 
 
     time_requirment = config.adalm_pluto.rx_buffer_size / sample_rate
-    print(f"HARDWARE COMMUNICATION LOOP: time_requirmenht: {time_requirment}")
+    print(f"HARDWARE PROCESS: time_requirmenht: {time_requirment}")
     to_slow_loop_counter = 0
     last_timestamp = time.perf_counter()
     lost_rx_raw_data_packages = 0
@@ -63,17 +60,12 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
         average_rx_power = average_rx_power*0.99 + rx_power*0.01
 
         try:
-            if rx_power < average_rx_power*20: #Listen before transmittion
-                tx_data = tx_q.get_nowait()
-                if not config.general.run_from_file:
-                    sdr.rx_destroy_buffer() #destroies buffer to stop reciving
-                    sdr.tx(tx_data*(2**14)) #scales TX data
-                    time.sleep(len(tx_data) / sdr.sample_rate) #waiting for transmittion to finish and guard interval to settel oscialtor
-                    transmitted_packages = transmitted_packages + 1
+            tx_data = tx_q.get_nowait()
+            if not config.general.run_from_file:
+                sdr.tx(tx_data*(2**14)) #scales TX data
+                transmitted_packages = transmitted_packages + 1
         except queue.Empty:
             pass
-
-
 
 
         if config.general.run_from_file:
@@ -91,23 +83,18 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
             rx_q.put_nowait(rx_data)
             lost_rx_raw_data_packages += 1
 
-
-
-
         try:
             monitor_q.put_nowait(("rx_raw_data", rx_data))
             monitor_q.put_nowait(("rx_power", rx_power))
             monitor_q.put_nowait(("rx_average_power", average_rx_power))
-            monitor_q.put_nowait(("transmitted pacakges", transmitted_packages))
+            monitor_q.put_nowait(("transmitted pacakges", transmitted_packages))    
         except queue.Full:
             pass
-
-    
-
+        
     del sdr
-    print(f"HARDWARE COMMUNICATION LOOP: Lost adalm samplings: {to_slow_loop_counter}")
-    print(f"HARDWARE COMMUNICATION LOOP: Lost rx rawdata packages: {lost_rx_raw_data_packages}")
-    print("HARDWARE COMMUNICATION LOOP: stoped process")
+    print(f"HARDWARE PROCESS: Lost adalm samplings: {to_slow_loop_counter}")
+    print(f"HARDWARE PROCESS: Lost rx rawdata packages: {lost_rx_raw_data_packages}")
+    print("HARDWARE PROCESS: stoped process")
 
 #class for interacting with the SDR
 class HARDWARE_COMMUNICATION(): 

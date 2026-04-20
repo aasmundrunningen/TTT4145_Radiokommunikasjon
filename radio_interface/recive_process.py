@@ -70,7 +70,6 @@ def recive_process_loop(rx_q, binary_q, monitor_q, stop_event):
                     try:
                         binary_q.put(binary_data, timeout=0.1)
                     except queue.Full:
-                        print("RECIVER PROCESS: binary que full, discarded old data")
                         binary_q.get()
                         binary_q.put(binary_data)
                 else:
