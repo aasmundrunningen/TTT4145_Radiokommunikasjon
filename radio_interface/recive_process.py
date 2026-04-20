@@ -33,6 +33,9 @@ def recive_process_loop(rx_q, hardware_process_feedback_q, binary_q, monitor_q, 
     number_of_recived_packages = 0
     number_of_false_preamble   = 0
 
+
+    estimated_recive_time = np.full(100, np.nan) #gives an estimate for recive time relative to time.perf_counter()
+
     RC_filt_data = np.zeros(config.adalm_pluto.rx_buffer_size)
 
     while not stop_event.is_set():
@@ -72,14 +75,18 @@ def recive_process_loop(rx_q, hardware_process_feedback_q, binary_q, monitor_q, 
 
                 if result_code == 1: #correct preamble detected
                     number_of_recived_packages += 1
-                    try:
-                        time_of_rx_package = rx_timestamp - (config.adalm_pluto.rx_buffer_size - sop) / (config.general.symboles_per_second*config.filter.sps_rx)
-                        hardware_process_feedback_q.put_nowait(time_of_rx_package)
-                    except queue.Full:
-                        pass
-                        #hardware_process_feedback_q.get()
-                        #hardware_process_feedback_q.put(rx_timestamp)
-
+                    estimated_recive_time[:-1] = estimated_recive_time[1:]
+                    estimated_recive_time[-1] = rx_timestamp%config.TDMA.time_periode 
+                    if number_of_recived_packages > 5:
+                        if number_of_recived_packages == 5:
+                            print("Reciver got time lock")
+                        try:
+                            hardware_process_feedback_q.put_nowait(np.nanmean(estimated_recive_time)) #takes mean of data to
+                        except queue.Full:
+                            hardware_process_feedback_q.get()
+                            hardware_process_feedback_q.put(rx_timestamp)
+                    else:
+                        print(f"Got lock number {number_of_recived_packages}")
                     try:
                         binary_q.put(binary_data, timeout=0.1)
                     except queue.Full:

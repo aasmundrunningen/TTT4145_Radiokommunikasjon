@@ -1,9 +1,7 @@
 import numpy as np
 
-
-a = np.zeros(10)
-
-for i in range(20): 
-    a[:-1] = a[1:]
-    a[-1] = i
-    print(a)
+a = np.full(5, np.nan)
+print(a)
+for i in range(5):
+    print(np.nanmean(a))
+    a[i] = i

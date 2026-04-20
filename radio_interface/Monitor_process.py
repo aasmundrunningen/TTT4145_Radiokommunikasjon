@@ -91,7 +91,7 @@ class MONITOR:
         # We update the UI at 60Hz (approx 16ms), even if data comes in at 1000Hz.
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_plot)
-        self.timer.start(16) 
+        self.timer.start(32) 
         
 
     

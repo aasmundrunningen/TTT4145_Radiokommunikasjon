@@ -62,37 +62,21 @@ def hardware_communication_loop(ip, rx_q, rx_feedback_q, tx_q, monitor_q, stop_e
     rx_power = 0
     slave_recive_lock = False
     last_slave_recive_lock = False
+    slave_transmitt_enabled = False
+    latest_master_start_time_estimate = None
     next_start = time.perf_counter()
     while not stop_event.is_set():
         if time.perf_counter() > next_start + config.TDMA.time_periode:
             print(time.perf_counter() - next_start + config.TDMA.time_periode)
         #calculating new start time
         next_start = start_point + np.ceil((time.perf_counter() - start_point)/config.TDMA.time_periode)*config.TDMA.time_periode
-        #Transmittion
-        while time.perf_counter() < next_start: #busy wait for transmitt window
-            pass
-        #check if allowed to transmitt, either master or slave with a recive the last second
-        if master or slave_recive_lock:
-            try:
-                tx_data = tx_q.get_nowait()
-                if not config.general.run_from_file:
-                    sdr.tx(tx_data*(2**14)) #scales TX data
-                    
-                    #busy waiting for transmittion to finish
-                    t = time.perf_counter() + len(tx_data) / sdr.sample_rate
-                    while t > time.perf_counter():
-                        pass
-                    
-                    transmitted_packages = transmitted_packages + 1
-            except queue.Empty:
-                pass              
+        
         #Reciving
-        while time.perf_counter() < next_start + config.TDMA.time_tx + config.TDMA.time_guard: #waiting for recive window
+        while time.perf_counter() < next_start: #waiting for recive window
             pass
         if config.general.run_from_file:
             rx_data = data_logger.get_readback_data()
         else:
-            sdr.rx()#removes old data
             rx_data = sdr.rx() #makes it normalized to +-1
             #data_logger.log(rx_data.astype(np.complex64))
         try:
@@ -103,26 +87,44 @@ def hardware_communication_loop(ip, rx_q, rx_feedback_q, tx_q, monitor_q, stop_e
             lost_rx_raw_data_packages += 1
         rx_power = np.sum(np.abs(rx_data[-10:]))
 
-        #other stuff, doing while in guard interval
-
 
         #estimation of slave start point
-        last_slave_recive_lock = slave_recive_lock
         if not master: 
             try:
-                t = last_recive_package_timestamp
-                last_recive_package_timestamp = rx_feedback_q.get_nowait()
-                slave_recive_lock = True
-                start_point = last_recive_package_timestamp + config.TDMA.time_guard+config.TDMA.time_tx+0.001 #offsetting slave start half of time from master
+                estimated_master_start_time = rx_feedback_q.get_nowait()
+                latest_master_start_time_estimate = time.perf_counter()
+                start_point = estimated_master_start_time - config.TDMA.time_periode/2 + 0.001 #offsetting slave start half of the periode from master
+                slave_transmitt_enabled = True
             except queue.Empty:
-                if last_recive_package_timestamp == None or (time.perf_counter() - last_recive_package_timestamp > 1):
-                    slave_recive_lock = False
-                    start_point = start_point - np.random.rand()*0.001 #randomly moves start point to search for package if no sync has been made
+                if latest_master_start_time_estimate == None or (time.perf_counter() - latest_master_start_time_estimate > 10):
+                    slave_transmitt_enabled = False
+                    start_point = start_point - 0.001 #iterativ searching with 0.5ms search jump
                     #ensuring transmitt queue does not fill up
                     try:
                         tx_q.get_nowait()
                     except queue.Empty:
+                        pass        
+        
+        
+        #Transmittion
+        while time.perf_counter() < next_start + config.TDMA.time_rx+config.TDMA.time_guard: #busy wait for transmitt window
+            pass
+        #check if allowed to transmitt, either master or slave with a recive the last second
+        if master or slave_transmitt_enabled:
+            try:
+                tx_data = tx_q.get_nowait()
+                if not config.general.run_from_file:
+                    sdr.tx(tx_data*(2**14)) #scales TX data
+                    
+                    #busy waiting for transmittion to finish
+                    t = time.perf_counter() + len(tx_data) / sdr.sample_rate
+                    while t > time.perf_counter():
                         pass
+                    sdr.rx()#removes transmittion garbage from rx
+                    transmitted_packages = transmitted_packages + 1
+            except queue.Empty:
+                pass              
+        
         #---------------Monitoring--------------------------
         #rx_power = float(sdr._ctrl.find_channel('voltage0').attrs['rssi'].value.split()[0])
         #average_rx_power = average_rx_power*0.99 + rx_power*0.01
@@ -154,7 +156,7 @@ class HARDWARE_COMMUNICATION():
         self.monitor_q = monitor_q #for plotting of recived power
         self.tx_q = multiprocessing.Queue(maxsize=10)
         self.stop_event = multiprocessing.Event()
-        self.rx_feedback_q = multiprocessing.Queue(maxsize=1)
+        self.rx_feedback_q = multiprocessing.Queue(maxsize=2)
         
         self.hardware_process = multiprocessing.Process(target=hardware_communication_loop, args=(ip, self.rx_q, self.rx_feedback_q, self.tx_q, self.monitor_q, self.stop_event, master), daemon=True)
         self.hardware_process.start()
