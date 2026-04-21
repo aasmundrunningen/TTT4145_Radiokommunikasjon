@@ -54,7 +54,14 @@ class SOURCE_CODER:
 
         encoded = self.enc.encode(x_bytes, self.frame_samples)
 
-        opus_bits = np.unpackbits(np.frombuffer(encoded, dtype=np.uint8))
+        encoder_bytes = bytearray(encoded)
+
+        if len(encoder_bytes) < self.encoded_bytes_per_frame:
+            encoder_bytes.extend([0] * (self.encoded_bytes_per_frame - len(encoder_bytes)))
+        else:
+            encoder_bytes = encoder_bytes[:self.encoded_bytes_per_frame]
+
+        opus_bits = np.unpackbits(np.frombuffer(encoder_bytes, dtype=np.uint8))
         return opus_bits.astype(np.uint8)
 
     def source_decoder(self, opus_bits):
@@ -63,6 +70,11 @@ class SOURCE_CODER:
 
         if opus_bits.ndim != 1:
             raise ValueError("opus_bits må være en 1D-array")
+
+        if len(opus_bits) != self.encoded_bits_per_frame:
+            raise ValueError(
+                f"Forventet {self.encoded_bits_per_frame} bits, fikk {len(opus_bits)}"
+            )
 
         opus_bytes = np.packbits(opus_bits).tobytes()
 

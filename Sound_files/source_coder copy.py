@@ -15,10 +15,9 @@ class SOURCE_CODER:
         self.lowpass_filter = sig.butter(4, 0.45, btype='low', output='sos')
         self.highpass_filter = sig.butter(4, 0.01, btype='high', output='sos')
 
-        self.enc = opuslib.Encoder(self.fs, self.channels, opuslib.APPLICATION_AUDIO, )
+        self.enc = opuslib.Encoder(self.fs, self.channels, opuslib.APPLICATION_AUDIO)
         self.enc.bitrate = self.bitrate
-        self.enc.vbr=False
-
+        self.enc.vbr_constraint = 1  # Disables VBR, for å få fast bitrate. Dette gjør at hver frame har samme størrelse, som gjør det enklere å håndtere på mottakersiden.
         self.dec = opuslib.Decoder(self.fs, self.channels)
 
         # Fast pakkelengde i bytes for lagring/overføring i ditt oppsett
@@ -31,6 +30,7 @@ class SOURCE_CODER:
         returnerer: numpy-array av bits (uint8), fast lengde
         """
         data = np.asarray(data)
+
         if data.ndim != 2:
             raise ValueError(f"data må ha shape (samples, channels), fikk {data.shape}")
 
@@ -57,16 +57,28 @@ class SOURCE_CODER:
         # Opus encode
         encoded = self.enc.encode(x_bytes, self.frame_samples)
 
-        opus_bits = np.unpackbits(np.frombuffer(encoded, dtype=np.uint8))
-        #print(f"Antall opus-bits: {len(opus_bits)}")
+        # Tving til fast lengde
+        encoder_bytes = bytearray(encoded)
+
+        if len(encoder_bytes) < self.encoded_bytes_per_frame:
+            encoder_bytes.extend([0] * (self.encoded_bytes_per_frame - len(encoder_bytes)))
+        else:
+            encoder_bytes = encoder_bytes[:self.encoded_bytes_per_frame]
+
+        opus_bits = np.unpackbits(np.frombuffer(encoder_bytes, dtype=np.uint8))
         return opus_bits.astype(np.uint8)
 
     def source_decoder(self, opus_bits):
 
         opus_bits = np.asarray(opus_bits, dtype=np.uint8)
-        #print(f"Antall opus-bits i decoder: {len(opus_bits)}")
+
         if opus_bits.ndim != 1:
             raise ValueError("opus_bits må være en 1D-array")
+
+        if len(opus_bits) != self.encoded_bits_per_frame:
+            raise ValueError(
+                f"Forventet {self.encoded_bits_per_frame} bits, fikk {len(opus_bits)}"
+            )
 
         opus_bytes = np.packbits(opus_bits).tobytes()
 
