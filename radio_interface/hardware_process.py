@@ -38,6 +38,7 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
         sdr.sample_rate                 = sample_rate
         sdr.tx_lo                       = int(config.adalm_pluto.tx_lo_freq)
         sdr.tx_hardwaregain_chan0       = int(config.adalm_pluto.tx_gain)
+        sdr.tx_cyclic_buffer = True
 
         sdr.gain_control_mode_chan0     = "manual"
         sdr.rx_lo                       = int(config.adalm_pluto.rx_lo_freq)
@@ -51,6 +52,8 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
     to_slow_loop_counter = 0
     last_timestamp = time.perf_counter()
     lost_rx_raw_data_packages = 0
+
+    t = False
     while not stop_event.is_set():
         #timing to check that the loop runs fast enough
         if time.perf_counter() - last_timestamp > time_requirment:
@@ -62,12 +65,14 @@ def hardware_communication_loop(ip, rx_q, tx_q, monitor_q, stop_event):
         try:
             tx_data = tx_q.get_nowait()
             if not config.general.run_from_file:
-                sdr.tx(tx_data*(2**14)) #scales TX data
+                if not t:
+                    sdr.tx(tx_data*(2**14)) #scales TX data
+                    t = True
                 transmitted_packages = transmitted_packages + 1
         except queue.Empty:
             pass
 
-
+        
         if config.general.run_from_file:
             rx_data = data_logger.get_readback_data()
         else:

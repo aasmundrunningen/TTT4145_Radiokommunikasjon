@@ -17,6 +17,8 @@ if __name__ == "__main__":
             ip = "ip:192.168.2.1"
         elif sys.argv[1] == "3":
             ip = "ip:192.168.3.1"
+        elif sys.argv[1] == "4":
+            ip = "ip:192.168.4.1"
     if len(sys.argv) > 2:
         match sys.argv[2]:
             case "r":

@@ -4,7 +4,7 @@ import math
 import matplotlib.pyplot as plt
 from scipy.signal import upfirdn, butter, lfilter, lfiltic, freqz
 from . import config
-
+#import config
 
 class FILTERS():
     def __init__(self):
@@ -93,23 +93,23 @@ class FILTERS():
 
         fig, (ax1, ax2) = plt.subplots(1,2)
 
-
-        ax1.plot(np.linspace(-1, 1, np.size(h_f_tx)), np.abs(h_f_tx), '-', label="tx")
-        ax1.plot(np.linspace(-1, 1, np.size(h_f_rx)), np.abs(h_f_rx), '-', label="rx")
-        ax1.legend()
+        sampling_rate = config.general.symboles_per_second*config.filter.sps_rx
+        ax1.plot(np.linspace(-sampling_rate/2*1e-3, sampling_rate/2*1e-3, np.size(h_f_tx)), np.abs(h_f_tx), '-', label="tx")
+        #ax1.plot(np.linspace(-1, 1, np.size(h_f_rx)), np.abs(h_f_rx), '-', label="rx")
+        #ax1.legend()
         ax1.set_title("Frequency response")
-        ax1.set_xlabel("Normalized frequency")
+        ax1.set_xlabel("Frequency [kHz]")
         ax1.set_ylabel("Absolute magnitude")
         ax1.grid()
 
-        ax2.plot(t, h_t_tx, '.', label="tx")
-        ax2.plot(t, h_t_rx, '.', label="rx")
-        ax2.legend()
+        ax2.plot(t/config.general.symboles_per_second*1e6, h_t_tx, '.', label="tx")
+        #ax2.plot(t, h_t_rx, '.', label="rx")
+        #ax2.legend()
         ax2.set_title("Impulse response")
-        ax2.set_xlabel("normalized symbol time")
+        ax2.set_xlabel("time [us]")
         ax2.set_ylabel("Normalized amplitude")
         ax2.grid()
-
+        fig.suptitle("Root raised cosine filter response")
 
         plt.show()
 
